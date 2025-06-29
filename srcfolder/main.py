@@ -25,7 +25,7 @@ from .detection_model import get_scene_prediction
 # VIDEO INPUT SOURCE CONFIGURATION ──────────────────────────────────
 # UNCOMMENT only ONE of the following options:
 # VIDEO_INPUT_SOURCE = "WEBCAM"
-VIDEO_INPUT_SOURCE = r"C:\Personal Projects\AI_Powered_traffic_management_system\data\2165-155327596.mp4" # Example video path
+VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/gettyimages-1936679257-640_adpp.mp4" # Example video path
 # VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/sample_traffic_video.mp4" # Another example
 # ───────────────────────────────────────────────────────────────────
 
@@ -33,24 +33,25 @@ VIDEO_INPUT_SOURCE = r"C:\Personal Projects\AI_Powered_traffic_management_system
 FRAME_PROCESS_INTERVAL = 1
 
 # --- SCENE CLASSIFICATION & ALERTING LOGIC CONFIG ---
-SCENE_SMOOTHING_WINDOW_SIZE = 15 # Even more frames for smoother scene prediction
+SCENE_SMOOTHING_WINDOW_SIZE = 20 # Increased window for even smoother scene prediction
 MIN_SCENE_CONFIDENCE_DISPLAY = 0.50 
 
-# ACCIDENT ALERT THRESHOLDS
-ACCIDENT_CONFIDENCE_THRESHOLD_OBSERVE = 0.65 # Slightly higher for initial observe
-ACCIDENT_CONFIDENCE_THRESHOLD_WARN = 0.85 # Higher for warning
-ACCIDENT_CONFIDENCE_THRESHOLD_CRITICAL_ALERT = 0.92 # Very high for critical
-ACCIDENT_PERSISTENCE_FRAMES_WARN = 7 # Needs to be accident for 7 frames to become a 'Warning'
-ACCIDENT_PERSISTENCE_FRAMES_CRITICAL = 12 # Needs to be accident for 12 frames to become 'Critical Alert'
-ALERT_COOLDOWN_SECONDS = 20 # Time before a new critical alert can be triggered for the same incident
+# ACCIDENT ALERT THRESHOLDS (Increased for more caution)
+ACCIDENT_CONFIDENCE_THRESHOLD_OBSERVE = 0.70 # Higher for initial observe
+ACCIDENT_CONFIDENCE_THRESHOLD_WARN = 0.90 # Higher for warning
+ACCIDENT_CONFIDENCE_THRESHOLD_CRITICAL_ALERT = 0.95 # Very high for critical
+ACCIDENT_PERSISTENCE_FRAMES_WARN = 10 # Needs to be accident for 10 consecutive frames for Warning
+ACCIDENT_PERSISTENCE_FRAMES_CRITICAL = 15 # Needs to be accident for 15 consecutive frames for Critical Alert
+ALERT_COOLDOWN_SECONDS = 30 # Longer cooldown to prevent alert spam
 
 # Heuristic for reducing false positives for accident in dense traffic
-DENSE_TRAFFIC_CAR_COUNT_THRESHOLD = 10 # If more than X cars, and no specific accident indicators, be more cautious
-ACCIDENT_IMPACT_OBJECTS = ["stalled_vehicle", "debris_on_road", "overturned_vehicle", "fire"] # Specific objects indicating accident severity
+DENSE_TRAFFIC_CAR_COUNT_THRESHOLD_FOR_FALSE_POSITIVE = 15 # If more than X cars AND no specific accident indicators, be VERY cautious
+ACCIDENT_IMPACT_OBJECTS = ["stalled_vehicle", "debris_on_road", "overturned_vehicle", "fire", "truck", "bus"] # Consider large vehicles as "impact" objects if they are stationary/part of incident
+MIN_IMPACT_OBJECTS_FOR_ACCIDENT = 1 # At least one high-confidence impact object needed to confirm accident in dense traffic
 
 
 # --- YOLO DETECTION CONFIG ---
-YOLO_DETECTION_CONFIDENCE_OVERRIDE = 0.30 # Lowered for potentially more detections, adjust as needed
+YOLO_DETECTION_CONFIDENCE_OVERRIDE = 0.25 # Slightly lower for more detections, as we'll filter them later
 
 # --- UI Styling (Iron Man / JARVIS Vibe) ---
 # RGBA colors for transparency
@@ -306,7 +307,8 @@ def run_traffic_monitoring():
 
 
         # --- JARVIS-Level Scene Classification & Temporal Smoothing ---
-        scene_report = get_scene_prediction(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+        pil_frame_rgb = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        scene_report = get_scene_prediction(pil_frame_rgb)
         current_scene_label = scene_report["main_prediction"]
         scene_confidence = scene_report["main_confidence"]
         top_predictions_for_graph = scene_report["all_predictions"]
@@ -330,90 +332,88 @@ def run_traffic_monitoring():
         current_cars = 0
         current_accident_impact_objects = 0
         # Re-run YOLO for specific object counts needed for logic. Optimize if performance is an issue.
-        # This YOLO run is specifically for the accident heuristic, not for drawing all bboxes.
-        yolo_results_for_logic = yolo_model(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), conf=YOLO_DETECTION_CONFIDENCE_OVERRIDE, verbose=False)
+        yolo_results_for_logic = yolo_model(pil_frame_rgb, conf=YOLO_DETECTION_CONFIDENCE_OVERRIDE, verbose=False)
         for r in yolo_results_for_logic:
             for box in r.boxes:
                 label = yolo_model.names[int(box.cls[0])]
-                if label == "car" or label == "truck" or label == "bus":
+                if label in ["car", "truck", "bus"]: # Summing all vehicle types
                     current_cars += 1
-                if label in ACCIDENT_IMPACT_OBJECTS and float(box.conf[0]) > 0.6: # High confidence for impact objects
+                if label in ACCIDENT_IMPACT_OBJECTS and float(box.conf[0]) > 0.6: 
                     current_accident_impact_objects += 1
 
-        # Heuristic check for false positives: If classified as accident but many cars and no direct impact objects
-        potential_false_positive_accident = False
-        if most_common_scene == "accident" and current_cars > DENSE_TRAFFIC_CAR_COUNT_THRESHOLD and current_accident_impact_objects == 0:
-            if smoothed_scene_confidence < ACCIDENT_CONFIDENCE_THRESHOLD_CRITICAL_ALERT:
-                 potential_false_positive_accident = True
-
-
+        # Heuristic for reducing false positives:
+        # If classified as accident but in dense traffic and few/no direct impact objects
+        # OR if main scene is definitively 'dense_traffic' with high confidence.
+        force_observation = False
+        if most_common_scene == "dense_traffic" and smoothed_scene_confidence > 0.8: # Very high confidence in dense traffic
+            force_observation = True
+            if current_alert_level != "OBSERVATION":
+                event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Override: Dense Traffic Confirmed.")
+        elif most_common_scene == "accident" and current_cars > DENSE_TRAFFIC_CAR_COUNT_THRESHOLD_FOR_FALSE_POSITIVE and current_accident_impact_objects < MIN_IMPACT_OBJECTS_FOR_ACCIDENT:
+            # Predicted accident, but looks like very dense, non-impacted traffic
+            force_observation = True
+            if current_alert_level != "OBSERVATION":
+                event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Anomaly: Accident-like, but dense traffic. Verification needed.")
+        
         # Reset alert level if scene changes significantly or long cooldown
-        if most_common_scene != "accident" and current_alert_level != "OBSERVATION" and (time.time() - last_alert_timestamp) > ALERT_COOLDOWN_SECONDS:
+        if current_alert_level != "OBSERVATION" and \
+           (most_common_scene != "accident" or force_observation) and \
+           (time.time() - last_alert_timestamp) > ALERT_COOLDOWN_SECONDS:
             current_alert_level = "OBSERVATION"
             consecutive_accident_frames = 0
+            event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Status: Monitoring (Resolved/Cleared)")
         
-        # Only progress alert level if the most common scene is 'accident' and its confidence is high
-        if most_common_scene == "accident" and smoothed_scene_confidence >= ACCIDENT_CONFIDENCE_THRESHOLD_OBSERVE:
-            if not potential_false_positive_accident: # Only escalate if not a probable false positive
-                consecutive_accident_frames += 1
-                if consecutive_accident_frames >= ACCIDENT_PERSISTENCE_FRAMES_CRITICAL and smoothed_scene_confidence >= ACCIDENT_CONFIDENCE_THRESHOLD_CRITICAL_ALERT:
-                    if current_alert_level != "ALERT_SENT": 
-                        current_alert_level = "CRITICAL_ALERT"
-                        last_alert_timestamp = time.time() 
-                        print(f"[JARVIS-ALERT] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - CRITICAL ACCIDENT DETECTED! Triggering high-priority alert system.")
-                        event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - CRITICAL ACCIDENT! (Conf: {smoothed_scene_confidence:.2f})")
-                elif consecutive_accident_frames >= ACCIDENT_PERSISTENCE_FRAMES_WARN and smoothed_scene_confidence >= ACCIDENT_CONFIDENCE_THRESHOLD_WARN:
-                    current_alert_level = "WARNING"
-                    event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Potential Incident. (Conf: {smoothed_scene_confidence:.2f})")
-                else:
-                    current_alert_level = "OBSERVATION"
-            else: # It's an accident prediction, but looks like dense traffic
-                current_alert_level = "OBSERVATION" 
-                if frame_counter_for_animation % 30 == 0: # Log less frequently
-                    event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Anomaly: Accident-like, but dense traffic. Verification needed.")
-                consecutive_accident_frames = 0 # Reset frames as it's not a clear accident
-        else:
+        # Main alert escalation logic
+        if not force_observation and most_common_scene == "accident" and smoothed_scene_confidence >= ACCIDENT_CONFIDENCE_THRESHOLD_OBSERVE:
+            consecutive_accident_frames += 1
+            if consecutive_accident_frames >= ACCIDENT_PERSISTENCE_FRAMES_CRITICAL and smoothed_scene_confidence >= ACCIDENT_CONFIDENCE_THRESHOLD_CRITICAL_ALERT:
+                if current_alert_level != "ALERT_SENT": 
+                    current_alert_level = "CRITICAL_ALERT"
+                    last_alert_timestamp = time.time() 
+                    print(f"[JARVIS-ALERT] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - CRITICAL ACCIDENT DETECTED! Triggering high-priority alert system.")
+                    event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - CRITICAL ACCIDENT! (Conf: {smoothed_scene_confidence:.2f})")
+            elif consecutive_accident_frames >= ACCIDENT_PERSISTENCE_FRAMES_WARN and smoothed_scene_confidence >= ACCIDENT_CONFIDENCE_THRESHOLD_WARN:
+                current_alert_level = "WARNING"
+                event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Potential Incident. (Conf: {smoothed_scene_confidence:.2f})")
+            else:
+                current_alert_level = "OBSERVATION"
+        elif force_observation: # If forced to observation, ensure counters reset
+            current_alert_level = "OBSERVATION"
             consecutive_accident_frames = 0
-
+        else: # Not an accident scenario
+            consecutive_accident_frames = 0
+            current_alert_level = "OBSERVATION" # Explicitly set to observation if not actively detecting incident
+            
 
         # Determine action message based on alert level
         display_action_message = scene_report["suggested_action"]
         if current_alert_level == "WARNING":
-            display_action_message = f"VERIFICATION REQUIRED: Potential Incident Identified. (Conf: {smoothed_scene_confidence:.2f})"
+            display_action_message = f"VERIFICATION REQUIRED: Potential Incident. (Conf: {smoothed_scene_confidence:.2f})"
         elif current_alert_level == "CRITICAL_ALERT":
             display_action_message = f"URGENT: DISPATCHING EMERGENCY SERVICES! Conf: {smoothed_scene_confidence:.2f}"
-            if last_alert_timestamp and (time.time() - last_alert_timestamp < 5): # Cooldown for console print
-                pass 
-            else:
-                print(f"[JARVIS-ALERT] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - CRITICAL ACCIDENT DETECTED! Alerting emergency services for scene: {most_common_scene.upper()} (Confidence: {smoothed_scene_confidence:.2f})")
-                last_alert_timestamp = time.time()
+            # This console print is already in the main logic block for critical alert for cooldown handling
         elif current_alert_level == "ALERT_SENT":
             display_action_message = "ALERT DISPATCHED. Monitoring Scene for Updates."
             
         
         # --- Draw Main HUD Elements ---
-        # Top-left HUD block: Scene, Status, and Action
         current_y_pos_top = 20 
         
-        # Scene Status (Main display) with dynamic color/glow
         scene_color_for_display = SCENE_LABEL_COLORS.get(most_common_scene, HUD_TEXT_COLOR_PRIMARY)
         scene_display_text = f"SCENE: {most_common_scene.replace('_', ' ').upper()}"
         
-        # Pulsating text for scene status
         pulse_alpha = int(255 * (math.sin(frame_counter_for_animation * 0.1) * 0.2 + 0.8)) 
         text_color_pulsating = scene_color_for_display[:3] + (pulse_alpha,)
 
         draw_hud_text(draw, scene_display_text, (30, current_y_pos_top + 10), font_main, text_color_pulsating)
         draw_hud_text(draw, f"CONF: {smoothed_scene_confidence:.2f}", (30, current_y_pos_top + 10 + font_main_height + 5), font_sub, HUD_TEXT_COLOR_HIGHLIGHT)
 
-        # Underline/Separator with glow and animated scanline
         text_bbox = font_main.getbbox(scene_display_text)
         line_start_x = 25
         line_end_x = line_start_x + text_bbox[2] - text_bbox[0] + 50
         line_y = current_y_pos_top + (font_main_height * 2) + 30
         draw_glowing_line(draw, line_start_x, line_y, line_end_x, line_y, HUD_CYAN_LIGHT, base_width=2)
         
-        # Simulate scanline
         scan_x = line_start_x + int((line_end_x - line_start_x) * (frame_counter_for_animation % 60 / 60.0))
         draw_glowing_line(draw, scan_x, line_y - 5, scan_x, line_y + 5, HUD_CYAN_LIGHT, base_width=1)
 
@@ -433,13 +433,11 @@ def run_traffic_monitoring():
             alert_text_color = SCENE_LABEL_COLORS["accident"] 
             alert_bg_color = HUD_RED_CRITICAL
             alert_outline_color = HUD_RED_CRITICAL
-            # Pulsating border around the entire frame
-            # FIX: Correctly construct the fill color tuple (R, G, B, new_alpha)
             pulsating_fill_alpha = int(100 * (math.sin(frame_counter_for_animation * 0.3) * 0.5 + 0.5))
             pulsating_fill_color = (HUD_RED_CRITICAL[0], HUD_RED_CRITICAL[1], HUD_RED_CRITICAL[2], pulsating_fill_alpha)
             
             draw.rectangle((0, 0, frame_width-1, frame_height-1), outline=HUD_RED_CRITICAL, width=max(2, int(frame_width * 0.005)), 
-                           fill=pulsating_fill_color) # Corrected fill color
+                           fill=pulsating_fill_color)
                            
 
 
@@ -462,7 +460,7 @@ def run_traffic_monitoring():
         object_counts: Dict[str, int] = {}
         
         # The YOLO model results (already run for logic above) can be reused for drawing bboxes
-        for r in yolo_results_for_logic: # Using yolo_results_for_logic here directly
+        for r in yolo_results_for_logic: 
             boxes = r.boxes
             for box in boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -492,8 +490,6 @@ def run_traffic_monitoring():
 
         # Populate object panel content
         obj_content_y_start = panel_y_obj + 60
-        dummy_text_bbox_small = font_small.getbbox("Tg")
-        font_small_height = dummy_text_bbox_small[3] - dummy_text_bbox_small[1]
         obj_line_height = font_small_height + 5
         max_lines_obj = (panel_height_obj - 60) // obj_line_height
         
@@ -530,16 +526,34 @@ def run_traffic_monitoring():
         log_line_height = font_small_height + 5 
         max_log_lines = (log_panel_height - 60) // log_line_height
 
-        # Scrolling log effect - FIX: Check if event_log_history is not empty
         if len(event_log_history) > 0:
-            scroll_denominator = len(event_log_history) * 10
-            if scroll_denominator == 0: scroll_denominator = 10 
-            log_offset = (frame_counter_for_animation % scroll_denominator) / 10.0 
+            # Ensure proper scrolling when there are events
+            effective_log_length = max_log_lines if len(event_log_history) > max_log_lines else len(event_log_history)
+            scroll_duration_frames = effective_log_length * 30 # Slower scroll based on number of lines
             
-            for i, log_entry in enumerate(list(event_log_history)):
-                display_idx = i - int(log_offset)
-                if display_idx >= 0 and display_idx < max_log_lines:
-                    draw_hud_text(draw, log_entry, (log_x + 20, log_content_y_start + display_idx * log_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
+            # Prevent ZeroDivisionError for modulo if scroll_duration_frames is zero
+            if scroll_duration_frames == 0:
+                scroll_denominator = 1 # Use a non-zero value, essentially no scroll for very few logs
+            else:
+                scroll_denominator = scroll_duration_frames
+
+            log_scroll_pos = (frame_counter_for_animation % scroll_denominator) / scroll_duration_frames # Normalized 0.0 to 1.0
+            
+            # Calculate start index for display, allowing the last lines to scroll in
+            start_log_index = max(0, len(event_log_history) - max_log_lines)
+            
+            # Apply fractional scrolling for a smoother effect
+            fractional_offset = (len(event_log_history) - max_log_lines) * log_scroll_pos
+            
+            for i in range(max_log_lines):
+                # Calculate the actual index in the history for this display line
+                actual_log_index = start_log_index + i + int(fractional_offset)
+                
+                if actual_log_index < len(event_log_history):
+                    log_entry = event_log_history[actual_log_index]
+                    # Adjust y-position by the fractional part for smooth scroll
+                    y_pos = log_content_y_start + i * log_line_height - (fractional_offset - int(fractional_offset)) * log_line_height
+                    draw_hud_text(draw, log_entry, (log_x + 20, y_pos), font_small, HUD_TEXT_COLOR_SECONDARY)
         else: 
             draw_hud_text(draw, "No events to display.", (log_x + 20, log_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY)
 
