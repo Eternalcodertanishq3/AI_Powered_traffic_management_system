@@ -25,7 +25,7 @@ from .detection_model import get_scene_prediction
 # VIDEO INPUT SOURCE CONFIGURATION ──────────────────────────────────
 # UNCOMMENT only ONE of the following options:
 # VIDEO_INPUT_SOURCE = "WEBCAM"
-VIDEO_INPUT_SOURCE = r"C:\Personal Projects\AI_Powered_traffic_management_system\data\2165-155327596.mp4" # Example video path
+VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/gettyimages-1936679257-640_adpp.mp4" # Example video path
 # VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/sample_traffic_video.mp4" # Another example
 # ───────────────────────────────────────────────────────────────────
 
@@ -329,7 +329,10 @@ def run_traffic_monitoring():
         # --- Alert Level Logic & Smart Accident Filter ---
         current_cars = 0
         current_accident_impact_objects = 0
-        for r in yolo_model(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), conf=YOLO_DETECTION_CONFIDENCE_OVERRIDE, verbose=False):
+        # Re-run YOLO for specific object counts needed for logic. Optimize if performance is an issue.
+        # This YOLO run is specifically for the accident heuristic, not for drawing all bboxes.
+        yolo_results_for_logic = yolo_model(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), conf=YOLO_DETECTION_CONFIDENCE_OVERRIDE, verbose=False)
+        for r in yolo_results_for_logic:
             for box in r.boxes:
                 label = yolo_model.names[int(box.cls[0])]
                 if label == "car" or label == "truck" or label == "bus":
@@ -340,8 +343,6 @@ def run_traffic_monitoring():
         # Heuristic check for false positives: If classified as accident but many cars and no direct impact objects
         potential_false_positive_accident = False
         if most_common_scene == "accident" and current_cars > DENSE_TRAFFIC_CAR_COUNT_THRESHOLD and current_accident_impact_objects == 0:
-            # If dense traffic, no specific "damage" objects, and confidence isn't super high,
-            # we consider it a false positive or at least raise the bar for critical alert.
             if smoothed_scene_confidence < ACCIDENT_CONFIDENCE_THRESHOLD_CRITICAL_ALERT:
                  potential_false_positive_accident = True
 
@@ -350,7 +351,6 @@ def run_traffic_monitoring():
         if most_common_scene != "accident" and current_alert_level != "OBSERVATION" and (time.time() - last_alert_timestamp) > ALERT_COOLDOWN_SECONDS:
             current_alert_level = "OBSERVATION"
             consecutive_accident_frames = 0
-            # print("[JARVIS-LOG] Alert level reset to OBSERVATION (cooldown/scene change).")
         
         # Only progress alert level if the most common scene is 'accident' and its confidence is high
         if most_common_scene == "accident" and smoothed_scene_confidence >= ACCIDENT_CONFIDENCE_THRESHOLD_OBSERVE:
@@ -368,7 +368,7 @@ def run_traffic_monitoring():
                 else:
                     current_alert_level = "OBSERVATION"
             else: # It's an accident prediction, but looks like dense traffic
-                current_alert_level = "OBSERVATION" # Keep at observation, or specific "Dense Traffic Anomaly"
+                current_alert_level = "OBSERVATION" 
                 if frame_counter_for_animation % 30 == 0: # Log less frequently
                     event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Anomaly: Accident-like, but dense traffic. Verification needed.")
                 consecutive_accident_frames = 0 # Reset frames as it's not a clear accident
@@ -382,6 +382,11 @@ def run_traffic_monitoring():
             display_action_message = f"VERIFICATION REQUIRED: Potential Incident Identified. (Conf: {smoothed_scene_confidence:.2f})"
         elif current_alert_level == "CRITICAL_ALERT":
             display_action_message = f"URGENT: DISPATCHING EMERGENCY SERVICES! Conf: {smoothed_scene_confidence:.2f}"
+            if last_alert_timestamp and (time.time() - last_alert_timestamp < 5): # Cooldown for console print
+                pass 
+            else:
+                print(f"[JARVIS-ALERT] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - CRITICAL ACCIDENT DETECTED! Alerting emergency services for scene: {most_common_scene.upper()} (Confidence: {smoothed_scene_confidence:.2f})")
+                last_alert_timestamp = time.time()
         elif current_alert_level == "ALERT_SENT":
             display_action_message = "ALERT DISPATCHED. Monitoring Scene for Updates."
             
@@ -395,15 +400,16 @@ def run_traffic_monitoring():
         scene_display_text = f"SCENE: {most_common_scene.replace('_', ' ').upper()}"
         
         # Pulsating text for scene status
-        pulse_alpha = int(255 * (math.sin(frame_counter_for_animation * 0.1) * 0.2 + 0.8)) # Pulsates between 80-100% alpha
+        pulse_alpha = int(255 * (math.sin(frame_counter_for_animation * 0.1) * 0.2 + 0.8)) 
         text_color_pulsating = scene_color_for_display[:3] + (pulse_alpha,)
 
         draw_hud_text(draw, scene_display_text, (30, current_y_pos_top + 10), font_main, text_color_pulsating)
         draw_hud_text(draw, f"CONF: {smoothed_scene_confidence:.2f}", (30, current_y_pos_top + 10 + font_main_height + 5), font_sub, HUD_TEXT_COLOR_HIGHLIGHT)
 
         # Underline/Separator with glow and animated scanline
+        text_bbox = font_main.getbbox(scene_display_text)
         line_start_x = 25
-        line_end_x = line_start_x + font_main.getbbox(scene_display_text)[2] - font_main.getbbox(scene_display_text)[0] + 50
+        line_end_x = line_start_x + text_bbox[2] - text_bbox[0] + 50
         line_y = current_y_pos_top + (font_main_height * 2) + 30
         draw_glowing_line(draw, line_start_x, line_y, line_end_x, line_y, HUD_CYAN_LIGHT, base_width=2)
         
@@ -428,8 +434,13 @@ def run_traffic_monitoring():
             alert_bg_color = HUD_RED_CRITICAL
             alert_outline_color = HUD_RED_CRITICAL
             # Pulsating border around the entire frame
+            # FIX: Correctly construct the fill color tuple (R, G, B, new_alpha)
+            pulsating_fill_alpha = int(100 * (math.sin(frame_counter_for_animation * 0.3) * 0.5 + 0.5))
+            pulsating_fill_color = (HUD_RED_CRITICAL[0], HUD_RED_CRITICAL[1], HUD_RED_CRITICAL[2], pulsating_fill_alpha)
+            
             draw.rectangle((0, 0, frame_width-1, frame_height-1), outline=HUD_RED_CRITICAL, width=max(2, int(frame_width * 0.005)), 
-                           fill=HUD_RED_CRITICAL + (int(100 * (math.sin(frame_counter_for_animation * 0.3) * 0.5 + 0.5)),)) # Subtle fill pulsation
+                           fill=pulsating_fill_color) # Corrected fill color
+                           
 
 
         draw_hud_box(draw, (10, current_y_pos_top + 10, 380, current_y_pos_top + 120), alert_bg_color, alert_outline_color, HUD_OUTLINE_WIDTH, HUD_CORNER_RADIUS)
@@ -439,8 +450,8 @@ def run_traffic_monitoring():
 
         # --- Object Detection Panel (Top Right) ---
         panel_padding = 20
-        panel_width_obj = 380 # Consistent with left panel
-        panel_height_obj = 240 # Expanded height for more info
+        panel_width_obj = 380 
+        panel_height_obj = 240 
         panel_x_obj = frame_width - panel_width_obj - panel_padding
         panel_y_obj = panel_padding
 
@@ -450,11 +461,8 @@ def run_traffic_monitoring():
 
         object_counts: Dict[str, int] = {}
         
-        # The YOLO model is run on the original frame
-        results = yolo_model(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), conf=YOLO_DETECTION_CONFIDENCE_OVERRIDE, verbose=False)
-
-        # Draw YOLO bounding boxes and collect counts
-        for r in results:
+        # The YOLO model results (already run for logic above) can be reused for drawing bboxes
+        for r in yolo_results_for_logic: # Using yolo_results_for_logic here directly
             boxes = r.boxes
             for box in boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -484,6 +492,8 @@ def run_traffic_monitoring():
 
         # Populate object panel content
         obj_content_y_start = panel_y_obj + 60
+        dummy_text_bbox_small = font_small.getbbox("Tg")
+        font_small_height = dummy_text_bbox_small[3] - dummy_text_bbox_small[1]
         obj_line_height = font_small_height + 5
         max_lines_obj = (panel_height_obj - 60) // obj_line_height
         
@@ -493,23 +503,22 @@ def run_traffic_monitoring():
                 draw_hud_text(draw, f"- {obj_label.capitalize()}: {count}", (panel_x_obj + 20, obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
                 current_obj_lines_count += 1
         
-        # Add a placeholder for "total detected"
         total_detected_objects = sum(object_counts.values())
         if current_obj_lines_count < max_lines_obj:
              draw_hud_text(draw, f"TOTAL: {total_detected_objects}", (panel_x_obj + 20, obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_HIGHLIGHT)
 
 
         # --- Scene Confidence Bar Graph (Bottom of Top Right Panel) ---
-        graph_y_start = panel_y_obj + panel_height_obj - 100 # Position graph near bottom of panel
-        graph_height = 80 # Fixed height for graph
+        graph_y_start = panel_y_obj + panel_height_obj - 100 
+        graph_height = 80 
         
         draw_hud_text(draw, "SCENE CONFIDENCE:", (panel_x_obj + 20, graph_y_start - font_small_height - 5), font_small, HUD_TEXT_COLOR_PRIMARY)
         draw_bar_graph(draw, panel_x_obj + 10, graph_y_start, panel_width_obj - 20, graph_height, top_predictions_for_graph, font_small, HUD_CYAN_LIGHT)
 
 
         # --- Event Log Panel (Bottom Left) ---
-        log_panel_width = 380 # Consistent width
-        log_panel_height = 200 # Fixed height
+        log_panel_width = 380 
+        log_panel_height = 200 
         log_x = 10
         log_y = frame_height - log_panel_height - 20 
         
@@ -521,17 +530,23 @@ def run_traffic_monitoring():
         log_line_height = font_small_height + 5 
         max_log_lines = (log_panel_height - 60) // log_line_height
 
-        # Scrolling log effect
-        log_offset = (frame_counter_for_animation % (len(event_log_history) * 10)) / 10 # Slow scroll
-        for i, log_entry in enumerate(list(event_log_history)):
-            display_idx = i - int(log_offset)
-            if display_idx >= 0 and display_idx < max_log_lines:
-                draw_hud_text(draw, log_entry, (log_x + 20, log_content_y_start + display_idx * log_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
+        # Scrolling log effect - FIX: Check if event_log_history is not empty
+        if len(event_log_history) > 0:
+            scroll_denominator = len(event_log_history) * 10
+            if scroll_denominator == 0: scroll_denominator = 10 
+            log_offset = (frame_counter_for_animation % scroll_denominator) / 10.0 
+            
+            for i, log_entry in enumerate(list(event_log_history)):
+                display_idx = i - int(log_offset)
+                if display_idx >= 0 and display_idx < max_log_lines:
+                    draw_hud_text(draw, log_entry, (log_x + 20, log_content_y_start + display_idx * log_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
+        else: 
+            draw_hud_text(draw, "No events to display.", (log_x + 20, log_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY)
 
 
         # --- System Status Panel (Bottom Right) ---
-        sys_panel_width = 300 # Slightly smaller
-        sys_panel_height = 180 # Slightly larger
+        sys_panel_width = 300 
+        sys_panel_height = 180 
         sys_x = frame_width - sys_panel_width - 20
         sys_y = frame_height - sys_panel_height - 20
 
@@ -545,9 +560,8 @@ def run_traffic_monitoring():
             fps = frame_count / elapsed_time
             fps_text = f"{fps:.1f}"
         
-        # Simulate CPU/GPU Load
-        simulated_cpu_load = 50 + 20 * math.sin(frame_counter_for_animation * 0.05) # Pulsating load
-        simulated_gpu_load = 60 + 15 * math.cos(frame_counter_for_animation * 0.07) # Pulsating load
+        simulated_cpu_load = 50 + 20 * math.sin(frame_counter_for_animation * 0.05) 
+        simulated_gpu_load = 60 + 15 * math.cos(frame_counter_for_animation * 0.07) 
         simulated_data_rate = 10 + 5 * math.sin(frame_counter_for_animation * 0.03)
 
         sys_lines = [
