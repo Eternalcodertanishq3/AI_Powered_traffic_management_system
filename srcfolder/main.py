@@ -25,7 +25,7 @@ from .detection_model import get_scene_prediction
 # VIDEO INPUT SOURCE CONFIGURATION ──────────────────────────────────
 # UNCOMMENT only ONE of the following options:
 # VIDEO_INPUT_SOURCE = "WEBCAM"
-VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/gettyimages-1936679257-640_adpp.mp4" # Example video path
+VIDEO_INPUT_SOURCE = r"C:\Personal Projects\AI_Powered_traffic_management_system\data\2165-155327596.mp4" # Example video path
 # VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/sample_traffic_video.mp4" # Another example
 # ───────────────────────────────────────────────────────────────────
 
