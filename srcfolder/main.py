@@ -53,8 +53,8 @@ YOLO_DETECTION_CONFIDENCE_OVERRIDE = 0.25
 
 # --- UI Styling (Iron Man / JARVIS Vibe) ---
 # RGBA colors for transparency
-HUD_BLUE_DARK = (10, 20, 50, 220)       
-HUD_BLUE_MEDIUM = (20, 60, 100, 180)    
+HUD_BLUE_DARK_TRANSPARENT = (10, 20, 50, 180) # More transparent
+HUD_BLUE_MEDIUM_TRANSPARENT = (20, 60, 100, 150) # More transparent
 HUD_BLUE_LIGHT = (30, 144, 255, 180)    
 HUD_CYAN_LIGHT = (0, 255, 255, 180)     
 HUD_GREEN_LIGHT = (0, 255, 127, 180)    
@@ -165,18 +165,21 @@ def draw_wireframe_element(draw: ImageDraw.ImageDraw, frame_width: int, frame_he
     """Draws abstract wireframe elements with subtle animation, adapted for UI scale."""
     scaled_thickness = max(1, int(base_thickness * ui_scale_factor))
 
-    # Base corner lines - scaled
-    coords_base = [
-        (0, 50, 50, 0), (0, 100, 100, 0), 
-        (1280, 50, 1280 - 50, 0), (1280, 100, 1280 - 100, 0), 
-        (0, 720 - 50, 50, 720), (0, 720 - 100, 100, 720), 
-        (1280, 720 - 50, 1280 - 50, 720), (1280, 720 - 100, 1280 - 100, 720) 
+    # Using relative positions rather than hardcoded 1280x720 for adaptability
+    corner_line_length_h = int(frame_width * 0.05) # 5% of width
+    corner_line_length_v = int(frame_height * 0.07) # 7% of height
+
+    coords = [
+        (0, corner_line_length_v, corner_line_length_h, 0), # Top-left
+        (0, corner_line_length_v * 2, corner_line_length_h * 2, 0),
+        (frame_width, corner_line_length_v, frame_width - corner_line_length_h, 0), # Top-right
+        (frame_width, corner_line_length_v * 2, frame_width - corner_line_length_h * 2, 0),
+        (0, frame_height - corner_line_length_v, corner_line_length_h, frame_height), # Bottom-left
+        (0, frame_height - corner_line_length_v * 2, corner_line_length_h * 2, frame_height),
+        (frame_width, frame_height - corner_line_length_v, frame_width - corner_line_length_h, frame_height), # Bottom-right
+        (frame_width, frame_height - corner_line_length_v * 2, frame_width - corner_line_length_h * 2, frame_height)
     ]
-    for x1_base, y1_base, x2_base, y2_base in coords_base:
-        x1 = int(x1_base * ui_scale_factor)
-        y1 = int(y1_base * ui_scale_factor)
-        x2 = int(x2_base * ui_scale_factor)
-        y2 = int(y2_base * ui_scale_factor)
+    for x1, y1, x2, y2 in coords:
         draw_glowing_line(draw, x1, y1, x2, y2, line_color, scaled_thickness)
 
     # Dynamic Grid Overlay - subtle shifting, scaled
@@ -184,14 +187,14 @@ def draw_wireframe_element(draw: ImageDraw.ImageDraw, frame_width: int, frame_he
     grid_color = line_color[:3] + (grid_alpha,)
     
     # Horizontal grid lines
-    num_h_lines = max(3, int(frame_height / (150 * ui_scale_factor))) # Adaptive spacing
+    num_h_lines = max(3, int(frame_height / (150 * ui_scale_factor))) 
     for i in range(num_h_lines):
-        y_offset_base = (animation_frame % 200) * (50.0 / 200.0) # Smaller shift range
+        y_offset_base = (animation_frame % 200) * (50.0 / 200.0) 
         y_pos = int((i * (frame_height / num_h_lines)) + y_offset_base) % frame_height
         draw_glowing_line(draw, 0, y_pos, frame_width, y_pos, grid_color, max(1, scaled_thickness // 2))
 
     # Vertical grid lines
-    num_v_lines = max(3, int(frame_width / (150 * ui_scale_factor))) # Adaptive spacing
+    num_v_lines = max(3, int(frame_width / (150 * ui_scale_factor))) 
     for i in range(num_v_lines):
         x_offset_base = (animation_frame % 200) * (50.0 / 200.0)
         x_pos = int((i * (frame_width / num_v_lines)) + x_offset_base) % frame_width
@@ -208,16 +211,20 @@ def draw_wireframe_element(draw: ImageDraw.ImageDraw, frame_width: int, frame_he
     
 def draw_bar_graph(draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height: int, values: List[Dict[str, Any]], font: ImageFont.FreeTypeFont, base_color: Tuple[int,int,int,int], ui_scale_factor: float):
     """Draws a simple bar graph for confidences, adapted for UI scale."""
-    bar_spacing = max(2, int(10 * ui_scale_factor)) # Scale bar spacing
+    bar_spacing = max(2, int(5 * ui_scale_factor)) # Reduced bar spacing for tighter fit
+    
     dummy_text_bbox = font.getbbox("Tg")
     font_height = dummy_text_bbox[3] - dummy_text_bbox[1]
 
+    # Calculate available height for bars, accounting for value text above and label text below
     max_bar_height = height - (font_height * 2) - (bar_spacing * 2)
+    max_bar_height = max(1, max_bar_height) 
+
     num_bars = len(values)
     if num_bars == 0: return
 
     individual_bar_width = (width - (num_bars + 1) * bar_spacing) // num_bars
-    if individual_bar_width <= 0: return 
+    individual_bar_width = max(1, individual_bar_width) 
 
     for i, pred_dict in enumerate(values):
         label = pred_dict["label"]
@@ -230,18 +237,29 @@ def draw_bar_graph(draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height
         bar_y2 = y + height - font_height - bar_spacing
 
         bar_color = SCENE_LABEL_COLORS.get(label, base_color)
-        draw_rounded_rectangle(draw, (bar_x1, bar_y1, bar_x2, bar_y2), max(2, int(5 * ui_scale_factor)), fill=bar_color+(150,), outline=bar_color, width=1)
+        draw_rounded_rectangle(draw, (bar_x1, bar_y1, bar_x2, bar_y2), max(2, int(3 * ui_scale_factor)), fill=bar_color+(150,), outline=bar_color, width=1)
         
         draw_hud_text(draw, f"{value:.2f}", (bar_x1, bar_y1 - font_height - max(1, int(2 * ui_scale_factor))), font, HUD_TEXT_COLOR_PRIMARY)
         
         # Adaptive label display for bar graph
         display_label = label.replace('_', ' ')
-        label_bbox = font.getbbox(display_label)
-        if (label_bbox[2] - label_bbox[0]) > individual_bar_width: # If text is wider than bar
-            display_label = display_label[:int((individual_bar_width / (label_bbox[2] - label_bbox[0])) * len(display_label))] # Truncate roughly
-            if len(display_label) > 3: # Ensure at least some characters + ellipsis
-                 display_label = display_label.strip() + "..."
-
+        
+        # Calculate actual text width for the label.
+        text_w, _ = font.getsize(display_label) 
+        
+        if text_w > individual_bar_width:
+            # If text is too wide, try to scale down the font just for this label
+            # or truncate more aggressively.
+            
+            # Option 1: Truncate (more reliable on varying widths)
+            chars_to_fit = int(len(display_label) * (individual_bar_width / (text_w if text_w > 0 else 1.0))) - 2 # Leave space for ellipsis
+            if chars_to_fit > 0:
+                display_label = display_label[:max(chars_to_fit, 1)].strip()
+                if len(display_label) > 1: # Only add ellipsis if text is not just 1 character
+                    display_label += "." # Simpler ellipsis for tight spaces
+            else:
+                display_label = "" # Too small to display meaningfully
+        
         draw_hud_text(draw, display_label, (bar_x1, bar_y2 + max(1, int(2 * ui_scale_factor))), font, HUD_TEXT_COLOR_SECONDARY)
 
 
@@ -265,16 +283,59 @@ def run_traffic_monitoring():
     frame_count = 0
     start_time = time.time()
     
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Get original video frame dimensions
+    orig_frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    orig_frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # Define a base resolution for scaling UI elements.
-    BASE_UI_WIDTH = 1280
-    BASE_UI_HEIGHT = 720
+    # --- Dynamic Video Display Resizing ---
+    # Define a maximum display window size for consistency, proportional to typical screen size.
+    # This ensures videos of very high resolution don't create huge windows, and low res are upscaled intelligently.
+    MAX_DISPLAY_WIDTH = 1200 # Max width for the OpenCV window
+    MAX_DISPLAY_HEIGHT = 800 # Max height for the OpenCV window
 
-    # Calculate global UI scaling factor based on the smaller dimension to prevent overflow
-    global_ui_scale = min(frame_width / BASE_UI_WIDTH, frame_height / BASE_UI_HEIGHT)
+    # Calculate target dimensions while maintaining aspect ratio
+    aspect_ratio = orig_frame_width / orig_frame_height
+
+    if orig_frame_width > MAX_DISPLAY_WIDTH or orig_frame_height > MAX_DISPLAY_HEIGHT:
+        # Scale down if too large
+        if aspect_ratio > (MAX_DISPLAY_WIDTH / MAX_DISPLAY_HEIGHT):
+            display_width = MAX_DISPLAY_WIDTH
+            display_height = int(display_width / aspect_ratio)
+        else:
+            display_height = MAX_DISPLAY_HEIGHT
+            display_width = int(display_height * aspect_ratio)
+    else:
+        # If smaller than max, consider upscaling slightly or keeping original size for clarity
+        # For now, let's just use the original if it fits within max bounds
+        display_width = orig_frame_width
+        display_height = orig_frame_height
     
+    # Ensure minimum display size for very small input videos
+    MIN_DISPLAY_WIDTH = 640
+    MIN_DISPLAY_HEIGHT = 480
+    if display_width < MIN_DISPLAY_WIDTH and display_height < MIN_DISPLAY_HEIGHT:
+        # If both are too small, scale up to minimum while preserving aspect ratio
+        if aspect_ratio > (MIN_DISPLAY_WIDTH / MIN_DISPLAY_HEIGHT):
+            display_width = MIN_DISPLAY_WIDTH
+            display_height = int(display_width / aspect_ratio)
+        else:
+            display_height = MIN_DISPLAY_HEIGHT
+            display_width = int(display_height * aspect_ratio)
+    
+    # Use these calculated `display_width` and `display_height` for all subsequent UI calculations
+    # They represent the actual size of the OpenCV window and the frame after resizing.
+    frame_width = int(display_width)
+    frame_height = int(display_height)
+
+    # Calculate global UI scaling factor based on the actual display size relative to a conceptual base UI.
+    # Using a slightly higher base for calculation to ensure smaller elements scale down cleanly.
+    UI_DESIGN_BASE_WIDTH = 1920 # Full HD design base
+    UI_DESIGN_BASE_HEIGHT = 1080 # Full HD design base
+
+    global_ui_scale_w = frame_width / UI_DESIGN_BASE_WIDTH
+    global_ui_scale_h = frame_height / UI_DESIGN_BASE_HEIGHT
+    global_ui_scale = (global_ui_scale_w + global_ui_scale_h) / 2.0 # Averaged scale for text/elements
+
     # Dynamically adjust font sizes for HUD elements based on global UI scale
     hud_font_size_main_scaled = max(14, int(28 * global_ui_scale)) 
     hud_font_size_sub_scaled = max(10, int(20 * global_ui_scale)) 
@@ -288,12 +349,19 @@ def run_traffic_monitoring():
     font_sub_height = font_sub.getbbox("Tg")[3] - font_sub.getbbox("Tg")[1]
     font_small_height = font_small.getbbox("Tg")[3] - font_small.getbbox("Tg")[1]
 
+    # Create the OpenCV window for the scaled video
+    cv2.namedWindow("AI-Powered Traffic Monitoring (JARVIS-Level HUD)", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("AI-Powered Traffic Monitoring (JARVIS-Level HUD)", frame_width, frame_height)
+
 
     while True:
         ret, frame = cap.read()
         if not ret:
             print("[JARVIS-LOG] End of video or stream disconnected. Initiating shutdown sequence.")
             break
+
+        # Resize the frame to the calculated display dimensions *before* processing and drawing HUD
+        frame = cv2.resize(frame, (frame_width, frame_height), interpolation=cv2.INTER_AREA)
 
         frame_count += 1
         frame_counter_for_animation += 1
@@ -396,25 +464,26 @@ def run_traffic_monitoring():
         
         # --- Draw Main HUD Elements ---
         # Calculate adaptive padding and general UI element scaling factors
-        min_dim = min(frame_width, frame_height)
-        # Base padding is 20 pixels at 1280x720, scale it relative to min_dim
-        dynamic_padding = max(5, int(20 * (min_dim / BASE_UI_HEIGHT))) # Use height for consistent padding in both directions
+        min_display_dim = min(frame_width, frame_height)
+        dynamic_padding = max(5, int(20 * (min_display_dim / UI_DESIGN_BASE_HEIGHT))) 
         
         hud_outline_width = max(1, int(HUD_OUTLINE_WIDTH_BASE * global_ui_scale))
         hud_corner_radius = max(5, int(HUD_CORNER_RADIUS_BASE * global_ui_scale))
 
 
-        # Top-left HUD block: Scene, Status, and Action
-        # Panel width and height are now proportions of total available space
-        # Ensuring a minimum viable size for panels
-        panel1_target_width = int(frame_width * 0.30)
-        panel1_target_height = int(frame_height * 0.25)
-        panel1_width = max(int(BASE_UI_WIDTH * 0.2), panel1_target_width) # Minimum 20% of base width
-        panel1_height = max(int(BASE_UI_HEIGHT * 0.2), panel1_target_height) # Minimum 20% of base height
+        # Panel proportions relative to scaled frame_width/height
+        panel_base_width_ratio = 0.28 # Base width for side panels
+        panel_base_height_ratio = 0.28 # Base height for top/bottom panels
+
+        # --- Top-left HUD block: Scene, Status, and Action ---
+        panel1_width = max(int(frame_width * panel_base_width_ratio), int(180 * global_ui_scale)) # Min width
+        panel1_height = max(int(frame_height * panel_base_height_ratio), int(150 * global_ui_scale)) # Min height
         panel1_x = dynamic_padding
         panel1_y = dynamic_padding
 
-        # Re-calculate internal content positions dynamically based on new panel sizes
+        # Draw box first
+        draw_hud_box(draw, (panel1_x, panel1_y, panel1_x + panel1_width, panel1_y + panel1_height), HUD_BLUE_DARK_TRANSPARENT, HUD_BLUE_LIGHT, hud_outline_width, hud_corner_radius)
+        
         current_y_in_panel1 = panel1_y + int(10 * global_ui_scale) 
 
         scene_color_for_display = SCENE_LABEL_COLORS.get(most_common_scene, HUD_TEXT_COLOR_PRIMARY)
@@ -438,7 +507,7 @@ def run_traffic_monitoring():
         current_y_in_panel1 = line_y + int(10 * global_ui_scale)
 
         alert_text_color = HUD_TEXT_COLOR_PRIMARY
-        alert_bg_color = HUD_BLUE_DARK
+        alert_bg_color = HUD_BLUE_DARK_TRANSPARENT
         alert_outline_color = HUD_BLUE_LIGHT
         
         if current_alert_level == "WARNING":
@@ -456,32 +525,24 @@ def run_traffic_monitoring():
                            fill=pulsating_fill_color)
                            
 
-        draw_hud_box(draw, (panel1_x, panel1_y, panel1_x + panel1_width, panel1_y + panel1_height), HUD_BLUE_DARK, HUD_BLUE_LIGHT, hud_outline_width, hud_corner_radius)
-        # Redraw text on top of the box border
-        draw_hud_text(draw, scene_display_text, (panel1_x + int(20 * global_ui_scale), panel1_y + int(10 * global_ui_scale)), font_main, text_color_pulsating)
-        draw_hud_text(draw, f"CONF: {smoothed_scene_confidence:.2f}", (panel1_x + int(20 * global_ui_scale), panel1_y + int(10 * global_ui_scale) + font_main_height + int(5 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_HIGHLIGHT)
-        
-        current_y_for_alert_redraw = panel1_y + int(10 * global_ui_scale) + (font_main_height * 2) + int(30 * global_ui_scale) + int(10 * global_ui_scale) 
-        draw_hud_text(draw, f"STATUS: {current_alert_level.replace('_', ' ').upper()}", (panel1_x + int(20 * global_ui_scale), current_y_for_alert_redraw), font_sub, alert_text_color)
-        draw_hud_text(draw, display_action_message, (panel1_x + int(20 * global_ui_scale), current_y_for_alert_redraw + font_sub_height + int(5 * global_ui_scale)), font_small, HUD_TEXT_COLOR_SECONDARY)
+        draw_hud_text(draw, f"STATUS: {current_alert_level.replace('_', ' ').upper()}", (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_sub, alert_text_color)
+        current_y_in_panel1 += font_sub_height + int(5 * global_ui_scale)
+        draw_hud_text(draw, display_action_message, (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_small, HUD_TEXT_COLOR_SECONDARY)
 
 
         # --- Object Detection Panel (Top Right) ---
-        panel2_target_width = int(frame_width * 0.35) 
-        panel2_target_height = int(frame_height * 0.35) 
-        panel2_width = max(int(BASE_UI_WIDTH * 0.25), panel2_target_width) 
-        panel2_height = max(int(BASE_UI_HEIGHT * 0.25), panel2_target_height) 
+        panel2_width = max(int(frame_width * panel_base_width_ratio), int(200 * global_ui_scale)) 
+        panel2_height = max(int(frame_height * 0.4), int(250 * global_ui_scale)) # Taller for more object list and graph
         panel2_x = frame_width - panel2_width - dynamic_padding
         panel2_y = dynamic_padding
 
-        draw_hud_box(draw, (panel2_x, panel2_y, panel2_x + panel2_width, panel2_y + panel2_height), HUD_BLUE_DARK, HUD_CYAN_LIGHT, hud_outline_width, hud_corner_radius)
+        draw_hud_box(draw, (panel2_x, panel2_y, panel2_x + panel2_width, panel2_y + panel2_height), HUD_BLUE_DARK_TRANSPARENT, HUD_CYAN_LIGHT, hud_outline_width, hud_corner_radius)
         
         title_text_obj = "OBJECT CLASSIFICATION"
-        # Adjust font size specifically for this title if it's too long for the panel width
-        font_sub_obj_title = font_sub
-        title_text_obj_bbox = font_sub_obj_title.getbbox(title_text_obj)
-        if (title_text_obj_bbox[2] - title_text_obj_bbox[0]) > (panel2_width - int(40 * global_ui_scale)):
-             font_sub_obj_title = ImageFont.truetype(default_font_path, max(8, int(hud_font_size_sub_scaled * 0.8))) # Smaller font
+        font_sub_obj_title = font_sub 
+        text_w, _ = font_sub_obj_title.getsize(title_text_obj)
+        if text_w > (panel2_width - int(40 * global_ui_scale)):
+             font_sub_obj_title = ImageFont.truetype(default_font_path, max(8, int(hud_font_size_sub_scaled * 0.8 * (panel2_width / text_w))))
         
         draw_hud_text(draw, title_text_obj, (panel2_x + int(20 * global_ui_scale), panel2_y + int(15 * global_ui_scale)), font_sub_obj_title, HUD_TEXT_COLOR_PRIMARY)
         draw_glowing_line(draw, panel2_x + int(20 * global_ui_scale), panel2_y + int(50 * global_ui_scale), panel2_x + panel2_width - int(20 * global_ui_scale), panel2_y + int(50 * global_ui_scale), HUD_CYAN_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
@@ -504,119 +565,131 @@ def run_traffic_monitoring():
                     draw.rectangle([x1, y1, x2, y2], outline=color_with_alpha, width=max(1, int(frame_width * 0.0015 * global_ui_scale))) 
                     
                     text_label = f"{label.upper()} ({conf:.2f})"
-                    bbox_text = font_small.getbbox(text_label)
-                    text_width = bbox_text[2] - bbox_text[0]
-                    text_height = bbox_text[3] - bbox_text[1]
+                    bbox_font_small = font_small
+                    text_w, text_h = bbox_font_small.getsize(text_label)
                     
+                    max_bbox_label_width = x2 - x1 
+                    if max_bbox_label_width < int(50 * global_ui_scale): 
+                        max_bbox_label_width = int(50 * global_ui_scale) 
+                    
+                    if text_w > max_bbox_label_width:
+                        chars_to_fit = int(len(text_label) * (max_bbox_label_width / (text_w if text_w > 0 else 1.0))) - 2 
+                        if chars_to_fit > 0:
+                            text_label = text_label[:max(chars_to_fit, 1)].strip()
+                            if len(text_label) > 1:
+                                text_label += "." 
+                        else:
+                            text_label = "" 
+
+
                     text_x = x1 + max(1, int(4 * global_ui_scale))
-                    text_y = y1 - text_height - max(1, int(6 * global_ui_scale))
+                    text_y = y1 - text_h - max(1, int(6 * global_ui_scale))
                     if text_y < 0: text_y = y1 + max(1, int(2 * global_ui_scale)) 
                         
-                    draw_rounded_rectangle(draw, [text_x - max(1, int(2 * global_ui_scale)), text_y - max(1, int(2 * global_ui_scale)), text_x + text_width + max(1, int(4 * global_ui_scale)), text_y + text_height + max(1, int(4 * global_ui_scale))], radius=max(1, int(4 * global_ui_scale)), fill=color_with_alpha)
-                    draw.text((text_x, text_y), text_label, fill=(0,0,0), font=font_small)
+                    draw_rounded_rectangle(draw, [text_x - max(1, int(2 * global_ui_scale)), text_y - max(1, int(2 * global_ui_scale)), text_x + text_w + max(1, int(4 * global_ui_scale)), text_y + text_h + max(1, int(4 * global_ui_scale))], radius=max(1, int(4 * global_ui_scale)), fill=color_with_alpha)
+                    draw.text((text_x, text_y), text_label, fill=(0,0,0), font=bbox_font_small)
 
         obj_content_y_start = panel2_y + int(60 * global_ui_scale)
         obj_line_height = font_small_height + int(5 * global_ui_scale)
         
-        # Calculate max lines dynamically for object list
-        available_height_for_obj_list = panel2_height - (obj_content_y_start - panel2_y) - int(10 * global_ui_scale) - (font_small_height * 2) # Space for graph title and graph itself
+        graph_title_height_actual = font_small.getbbox("SCENE CONFIDENCE:")[3] - font_small.getbbox("SCENE CONFIDENCE:")[1]
+        graph_height_actual = int(panel2_height * 0.3) # Graph takes 30% of panel height
+        
+        available_height_for_obj_list = panel2_height - (obj_content_y_start - panel2_y) - graph_title_height_actual - graph_height_actual - int(10 * global_ui_scale)
         max_lines_obj = max(1, available_height_for_obj_list // obj_line_height)
 
         current_obj_lines_count = 0
-        sorted_objects = sorted(object_counts.items(), key=lambda item: item[1], reverse=True) # Show most common first
+        sorted_objects = sorted(object_counts.items(), key=lambda item: item[1], reverse=True) 
         for obj_label, count in sorted_objects:
             if current_obj_lines_count < max_lines_obj:
-                draw_hud_text(draw, f"- {obj_label.capitalize()}: {count}", (panel2_x + int(20 * global_ui_scale), obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
+                display_obj_text = f"- {obj_label.capitalize()}: {count}"
+                text_w, _ = font_small.getsize(display_obj_text)
+                if text_w > (panel2_width - int(40 * global_ui_scale)): # If line too wide
+                    chars_to_fit = int(len(display_obj_text) * ((panel2_width - int(40 * global_ui_scale)) / text_w)) - 2
+                    if chars_to_fit > 0:
+                        display_obj_text = display_obj_text[:max(chars_to_fit, 1)].strip() + "."
+                    else:
+                        display_obj_text = "" # Too small to display meaningfully
+                draw_hud_text(draw, display_obj_text, (panel2_x + int(20 * global_ui_scale), obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
                 current_obj_lines_count += 1
         
         total_detected_objects = sum(object_counts.values())
-        if current_obj_lines_count < max_lines_obj: # Only if space allows for total count
+        # Only draw total if there's sufficient room for at least one other item
+        if current_obj_lines_count < max_lines_obj: 
              draw_hud_text(draw, f"TOTAL: {total_detected_objects}", (panel2_x + int(20 * global_ui_scale), obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_HIGHLIGHT)
 
 
         # --- Scene Confidence Bar Graph (Bottom of Top Right Panel) ---
-        graph_title_height = font_small_height + int(5 * global_ui_scale)
-        graph_height = int(frame_height * 0.1) # Proportion of frame height, still
-        graph_y_start = panel2_y + panel2_height - graph_height - int(10 * global_ui_scale)
+        graph_y_start = panel2_y + panel2_height - graph_height_actual - int(10 * global_ui_scale)
         
-        draw_hud_text(draw, "SCENE CONFIDENCE:", (panel2_x + int(20 * global_ui_scale), graph_y_start - graph_title_height), font_small, HUD_TEXT_COLOR_PRIMARY)
-        draw_bar_graph(draw, panel2_x + int(10 * global_ui_scale), graph_y_start, panel2_width - int(20 * global_ui_scale), graph_height, top_predictions_for_graph, font_small, HUD_CYAN_LIGHT, ui_scale_factor=global_ui_scale)
+        draw_hud_text(draw, "SCENE CONFIDENCE:", (panel2_x + int(20 * global_ui_scale), graph_y_start - graph_title_height_actual), font_small, HUD_TEXT_COLOR_PRIMARY)
+        draw_bar_graph(draw, panel2_x + int(10 * global_ui_scale), graph_y_start, panel2_width - int(20 * global_ui_scale), graph_height_actual, top_predictions_for_graph, font_small, HUD_CYAN_LIGHT, ui_scale_factor=global_ui_scale)
 
 
         # --- Event Log Panel (Bottom Left) ---
-        panel3_target_width = int(frame_width * 0.30) 
-        panel3_target_height = int(frame_height * 0.25)
-        panel3_width = max(int(BASE_UI_WIDTH * 0.2), panel3_target_width)
-        panel3_height = max(int(BASE_UI_HEIGHT * 0.2), panel3_target_height)
+        panel3_width = max(int(frame_width * panel_base_width_ratio), int(180 * global_ui_scale)) 
+        panel3_height = max(int(frame_height * panel_base_height_ratio), int(150 * global_ui_scale))
         panel3_x = dynamic_padding
         panel3_y = frame_height - panel3_height - dynamic_padding
         
-        draw_hud_box(draw, (panel3_x, panel3_y, panel3_x + panel3_width, panel3_y + panel3_height), HUD_BLUE_DARK, HUD_BLUE_LIGHT, hud_outline_width, hud_corner_radius)
+        draw_hud_box(draw, (panel3_x, panel3_y, panel3_x + panel3_width, panel3_y + panel3_height), HUD_BLUE_DARK_TRANSPARENT, HUD_BLUE_LIGHT, hud_outline_width, hud_corner_radius)
         draw_hud_text(draw, "EVENT LOG", (panel3_x + int(20 * global_ui_scale), panel3_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY)
         draw_glowing_line(draw, panel3_x + int(20 * global_ui_scale), panel3_y + int(50 * global_ui_scale), panel3_x + panel3_width - int(20 * global_ui_scale), panel3_y + int(50 * global_ui_scale), HUD_BLUE_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
 
         log_content_y_start = panel3_y + int(60 * global_ui_scale)
         log_line_height = font_small_height + int(5 * global_ui_scale) 
-        # Calculate max lines dynamically for event log
         available_height_for_log = panel3_height - (log_content_y_start - panel3_y) - int(10 * global_ui_scale)
         max_log_lines = max(1, available_height_for_log // log_line_height)
 
         if len(event_log_history) > 0:
             effective_log_length = len(event_log_history)
-            # Adjust scroll speed based on number of lines to prevent too fast scrolling of few lines
             scroll_speed_factor = max(1.0, effective_log_length / max_log_lines) if max_log_lines > 0 else 1.0
-            scroll_duration_frames = int(effective_log_length * 30 / scroll_speed_factor) # Slower scroll based on number of lines
+            scroll_duration_frames = int(effective_log_length * 30 / scroll_speed_factor) 
             
             if scroll_duration_frames == 0: scroll_denominator = 1 
             else: scroll_denominator = scroll_duration_frames
 
-            # Calculate a precise fractional scroll position
             log_scroll_pos_norm = (frame_counter_for_animation % scroll_denominator) / scroll_denominator
             
-            # The start index for display, adjusted for total log size and panel capacity
-            start_index_for_display = max(0, effective_log_length - max_log_lines)
-            
-            # Calculate the total scroll distance in terms of lines (can be fractional)
             total_scroll_lines = (effective_log_length - max_log_lines) if effective_log_length > max_log_lines else 0
-            
-            # This is the actual offset in terms of lines to apply to drawing
             current_scroll_offset_lines = total_scroll_lines * log_scroll_pos_norm
             
-            # Draw visible lines
             for i in range(max_log_lines):
-                # The index of the log entry to draw for this line position (can be float)
                 log_entry_target_index = i + current_scroll_offset_lines
-                
-                # Get the actual log entry by flooring the target index
                 actual_log_index = int(log_entry_target_index)
                 
-                if actual_log_index < effective_log_length:
+                if actual_log_index < effective_log_length and actual_log_index >= 0:
                     log_entry = event_log_history[actual_log_index]
                     
-                    # Calculate the vertical position, adjusting for the fractional scroll
                     y_pos_adjustment = (log_entry_target_index - actual_log_index) * log_line_height
                     y_pos = log_content_y_start + i * log_line_height - y_pos_adjustment
                     
-                    draw_hud_text(draw, log_entry, (panel3_x + int(20 * global_ui_scale), y_pos), font_small, HUD_TEXT_COLOR_SECONDARY)
+                    display_log_text = log_entry
+                    text_w, _ = font_small.getsize(display_log_text)
+                    if text_w > (panel3_width - int(40 * global_ui_scale)):
+                        chars_to_fit = int(len(display_log_text) * ((panel3_width - int(40 * global_ui_scale)) / text_w)) - 2
+                        if chars_to_fit > 0:
+                            display_log_text = display_log_text[:max(chars_to_fit, 1)].strip() + "."
+                        else:
+                            display_log_text = ""
+                    draw_hud_text(draw, display_log_text, (panel3_x + int(20 * global_ui_scale), y_pos), font_small, HUD_TEXT_COLOR_SECONDARY)
         else: 
             draw_hud_text(draw, "No events to display.", (panel3_x + int(20 * global_ui_scale), log_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY)
 
 
         # --- System Status Panel (Bottom Right) ---
-        panel4_target_width = int(frame_width * 0.25) 
-        panel4_target_height = int(frame_height * 0.25) 
-        panel4_width = max(int(BASE_UI_WIDTH * 0.15), panel4_target_width) # Minimum 15% of base width
-        panel4_height = max(int(BASE_UI_HEIGHT * 0.15), panel4_target_height) # Minimum 15% of base height
+        panel4_width = max(int(frame_width * 0.25), int(160 * global_ui_scale)) # Slightly narrower
+        panel4_height = max(int(frame_height * panel_base_height_ratio), int(150 * global_ui_scale)) 
         panel4_x = frame_width - panel4_width - dynamic_padding
         panel4_y = frame_height - panel4_height - dynamic_padding
 
-        draw_hud_box(draw, (panel4_x, panel4_y, panel4_x + panel4_width, panel4_y + panel4_height), HUD_BLUE_DARK, HUD_GREEN_LIGHT, hud_outline_width, hud_corner_radius)
+        draw_hud_box(draw, (panel4_x, panel4_y, panel4_x + panel4_width, panel4_y + panel4_height), HUD_BLUE_DARK_TRANSPARENT, HUD_GREEN_LIGHT, hud_outline_width, hud_corner_radius)
         
         title_text_sys = "SYSTEM HEALTH"
         font_sub_sys_title = font_sub
-        title_text_sys_bbox = font_sub_sys_title.getbbox(title_text_sys)
-        if (title_text_sys_bbox[2] - title_text_sys_bbox[0]) > (panel4_width - int(40 * global_ui_scale)):
-            font_sub_sys_title = ImageFont.truetype(default_font_path, max(8, int(hud_font_size_sub_scaled * 0.8))) # Smaller font
+        text_w, _ = font_sub_sys_title.getsize(title_text_sys)
+        if text_w > (panel4_width - int(40 * global_ui_scale)):
+            font_sub_sys_title = ImageFont.truetype(default_font_path, max(8, int(hud_font_size_sub_scaled * 0.8 * (panel4_width / text_w))))
 
         draw_hud_text(draw, title_text_sys, (panel4_x + int(20 * global_ui_scale), panel4_y + int(15 * global_ui_scale)), font_sub_sys_title, HUD_TEXT_COLOR_PRIMARY)
         draw_glowing_line(draw, panel4_x + int(20 * global_ui_scale), panel4_y + int(50 * global_ui_scale), panel4_x + panel4_width - int(20 * global_ui_scale), panel4_y + int(50 * global_ui_scale), HUD_GREEN_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
@@ -644,13 +717,20 @@ def run_traffic_monitoring():
         sys_content_y_start = panel4_y + int(60 * global_ui_scale)
         sys_line_height = font_small_height + int(5 * global_ui_scale) 
         
-        # Calculate max lines dynamically for system health
         available_height_for_sys_list = panel4_height - (sys_content_y_start - panel4_y) - int(10 * global_ui_scale)
         max_sys_lines = max(1, available_height_for_sys_list // sys_line_height)
 
         for i, line in enumerate(sys_lines):
-            if i < max_sys_lines: # Only draw up to max_sys_lines
-                draw_hud_text(draw, line, (panel4_x + int(20 * global_ui_scale), sys_content_y_start + i * sys_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
+            if i < max_sys_lines: 
+                display_sys_text = line
+                text_w, _ = font_small.getsize(display_sys_text)
+                if text_w > (panel4_width - int(40 * global_ui_scale)):
+                    chars_to_fit = int(len(display_sys_text) * ((panel4_width - int(40 * global_ui_scale)) / text_w)) - 2
+                    if chars_to_fit > 0:
+                        display_sys_text = display_sys_text[:max(chars_to_fit, 1)].strip() + "."
+                    else:
+                        display_sys_text = ""
+                draw_hud_text(draw, display_sys_text, (panel4_x + int(20 * global_ui_scale), sys_content_y_start + i * sys_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
 
 
         # --- Composite the HUD layer onto the original frame ---
