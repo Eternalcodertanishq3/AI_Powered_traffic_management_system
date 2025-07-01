@@ -25,7 +25,7 @@ from .detection_model import get_scene_prediction
 # VIDEO INPUT SOURCE CONFIGURATION ──────────────────────────────────
 # UNCOMMENT only ONE of the following options:
 # VIDEO_INPUT_SOURCE = "WEBCAM"
-VIDEO_INPUT_SOURCE = r"C:\Personal Projects\AI_Powered_traffic_management_system\data\istockphoto-2162863868-640_adpp_is.mp4" # Example video path
+VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/gettyimages-1936679257-640_adpp.mp4" # Example video path
 # VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/sample_traffic_video.mp4" # Another example
 # ───────────────────────────────────────────────────────────────────
 
@@ -48,9 +48,10 @@ ACCIDENT_IMPACT_OBJECTS = ["stalled_vehicle", "debris_on_road", "overturned_vehi
 MIN_IMPACT_OBJECTS_FOR_ACCIDENT = 1 
 
 
-# --- YOLO DETECTION CONFIG ---
-YOLO_RAW_DETECTION_THRESHOLD = 0.10 
-YOLO_DISPLAY_THRESHOLD = 0.40 
+# --- YOLO DETECTION CONFIG (REVERTED TO V6.0 CORE) ---
+# This is the *only* confidence YOLO uses for its raw detections.
+# This was YOLO_DETECTION_CONFIDENCE_OVERRIDE in v6.0, now renamed for clarity.
+YOLO_PRIMARY_DETECTION_CONFIDENCE = 0.25 
 
 # --- JARVIS FEATURES CONFIG ---
 # Feature 1: Persistent Object Tracking
@@ -62,31 +63,47 @@ CONFIDENCE_SMOOTHING_WINDOW_SIZE = 7
 MIN_CONF_FOR_SMOOTHING_HISTORY = 0.05 
 
 # Feature 3: Object Metadata & Trajectory Prediction
-TRAJECTORY_PREDICTION_LENGTH = 50 # Pixels for predicted line
-TRAJECTORY_SMOOTHING_FACTOR = 0.7 # How much new movement influences predicted trajectory (0.0-1.0)
+TRAJECTORY_PREDICTION_LENGTH = 70 # Increased length for clearer visual
+TRAJECTORY_SMOOTHING_FACTOR = 0.8 # Higher smoothing for more stable trajectory
 
 # Feature 4: Region of Interest (ROI) Analysis & Data Tagging
 # Define a fixed ROI relative to frame dimensions (x1, y1, x2, y2)
-# Example: A central road segment. Adjust these values based on your video.
-# These will be calculated dynamically based on frame_width/height later.
-ROI_RELATIVE_X1 = 0.3
-ROI_RELATIVE_Y1 = 0.5
-ROI_RELATIVE_X2 = 0.7
-ROI_RELATIVE_Y2 = 0.85
-ROI_HIGHLIGHT_COLOR = (255, 100, 0, 80) # Orange, transparent
-ROI_BORDER_COLOR = (255, 165, 0, 200) # Orange, opaque
+# These values are now more central and slightly smaller for typical road focus.
+ROI_RELATIVE_X1 = 0.35
+ROI_RELATIVE_Y1 = 0.55
+ROI_RELATIVE_X2 = 0.65
+ROI_RELATIVE_Y2 = 0.80
+ROI_HIGHLIGHT_COLOR = (255, 100, 0, 60) # Orange, more transparent
+ROI_BORDER_COLOR = (255, 165, 0, 180) # Orange, slightly less opaque
 ROI_TAG_KEY = ord('t') # Keyboard key to tag event within ROI
+
+# Feature 5: Threat Assessment & Prioritization
+# Threat scores for different object types (base value)
+THREAT_BASE_SCORES = {
+    "person": 5, "bicycle": 3, "car": 2, "motorcycle": 3, "bus": 4, "truck": 4,
+    "stalled_vehicle": 8, "debris_on_road": 7, "overturned_vehicle": 10, "fire": 10,
+    "emergency_vehicle_passing": 6 # High threat due to speed/priority
+}
+THREAT_SPEED_MULTIPLIER = 0.1 # Multiplier for speed contribution to threat
+THREAT_DISTANCE_INVERSE_MULTIPLIER = 50 # Multiplier for inverse distance contribution
+
+# Feature 6: Environmental Anomaly Detection
+BRIGHTNESS_CHANGE_THRESHOLD = 30 # Absolute change in average brightness to trigger alert
+DENSITY_CHANGE_THRESHOLD = 0.2 # Relative change in object density in a small area to trigger alert
+LAST_BRIGHTNESS_ALERT_TIME = 0
+LAST_DENSITY_ALERT_TIME = 0
+ENVIRONMENTAL_ALERT_COOLDOWN = 10 # Seconds
 
 
 # --- UI Styling (Iron Man / JARVIS Vibe) ---
 # RGBA colors for transparency (even more transparent for non-critical states)
-HUD_BLUE_DARK_TRANSPARENT = (10, 20, 50, 80) # Even more transparent (was 120)
-HUD_BLUE_MEDIUM_TRANSPARENT = (20, 60, 100, 60) # Even more transparent (was 90)
-HUD_BLUE_LIGHT = (30, 144, 255, 150) # Slightly less opaque
-HUD_CYAN_LIGHT = (0, 255, 255, 150)     
-HUD_GREEN_LIGHT = (0, 255, 127, 150)    
-HUD_YELLOW_ACCENT = (255, 255, 0, 150)  
-HUD_RED_CRITICAL = (255, 69, 0, 200)    # Slightly less transparent for critical
+HUD_BLUE_DARK_TRANSPARENT = (10, 20, 50, 60) # Significantly more transparent (was 80)
+HUD_BLUE_MEDIUM_TRANSPARENT = (20, 60, 100, 40) # Significantly more transparent (was 60)
+HUD_BLUE_LIGHT = (30, 144, 255, 120) # More transparent
+HUD_CYAN_LIGHT = (0, 255, 255, 120)     
+HUD_GREEN_LIGHT = (0, 255, 127, 120)    
+HUD_YELLOW_ACCENT = (255, 255, 0, 120)  
+HUD_RED_CRITICAL = (255, 69, 0, 180)    # Slightly less transparent for critical
 HUD_TEXT_COLOR_PRIMARY = (220, 240, 255, 255) 
 HUD_TEXT_COLOR_SECONDARY = (180, 200, 255, 255) 
 HUD_TEXT_COLOR_HIGHLIGHT = (0, 255, 255, 255) 
@@ -170,9 +187,14 @@ frame_counter_for_animation = 0
 # --- Object Tracking Globals ---
 # Each tracked_object will be a dict:
 # { 'id': unique_id, 'bbox': [x1, y1, x2, y2], 'label': 'car', 'last_seen': frame_num,
-#   'confidence_history': deque, 'velocity_x': 0, 'velocity_y': 0, 'prev_bbox_center': (cx, cy) }
+#   'confidence_history': deque, 'velocity_x': 0, 'velocity_y': 0, 'prev_bbox_center': (cx, cy),
+#   'threat_score': 0 }
 tracked_objects = {}
 next_object_id = 0
+
+# --- Environmental Anomaly Globals ---
+prev_avg_brightness = -1
+prev_object_density = -1 # For density anomaly detection
 
 # --- Helper function for IoU (Intersection over Union) ---
 def calculate_iou(box1, box2):
@@ -308,6 +330,7 @@ def draw_bar_graph(draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height
 def run_traffic_monitoring():
     global current_alert_level, consecutive_accident_frames, last_alert_timestamp, frame_counter_for_animation
     global tracked_objects, next_object_id 
+    global prev_avg_brightness, prev_object_density, LAST_BRIGHTNESS_ALERT_TIME, LAST_DENSITY_ALERT_TIME
 
     cap = None
     if VIDEO_INPUT_SOURCE == "WEBCAM":
@@ -393,22 +416,19 @@ def run_traffic_monitoring():
         frame_count += 1
         frame_counter_for_animation += 1
 
-        # Handle keyboard input for ROI tagging
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
         elif key == ROI_TAG_KEY:
-            # Tag event: Log current objects within ROI
-            roi_x1 = int(frame_width * ROI_RELATIVE_X1)
-            roi_y1 = int(frame_height * ROI_RELATIVE_Y1)
-            roi_x2 = int(frame_width * ROI_RELATIVE_X2)
-            roi_y2 = int(frame_height * ROI_RELATIVE_Y2)
+            roi_x1_abs = int(frame_width * ROI_RELATIVE_X1)
+            roi_y1_abs = int(frame_height * ROI_RELATIVE_Y1)
+            roi_x2_abs = int(frame_width * ROI_RELATIVE_X2)
+            roi_y2_abs = int(frame_height * ROI_RELATIVE_Y2)
 
             objects_in_roi = []
-            for obj in display_objects: # Use the already filtered display_objects
+            for obj in display_objects: 
                 bbox = obj['bbox']
-                # Check if object bbox intersects with ROI
-                if not (bbox[0] > roi_x2 or bbox[2] < roi_x1 or bbox[1] > roi_y2 or bbox[3] < roi_y1):
+                if not (bbox[0] > roi_x2_abs or bbox[2] < roi_x1_abs or bbox[1] > roi_y2_abs or bbox[3] < roi_y1_abs):
                     objects_in_roi.append(f"{obj['label']} (ID:{obj['id']})")
             
             if objects_in_roi:
@@ -449,7 +469,8 @@ def run_traffic_monitoring():
         current_accident_impact_objects = 0
         
         # --- Object Detection & Tracking (JARVIS Feature 1 & 2) ---
-        yolo_results_current_frame = yolo_model(pil_frame_rgb, conf=YOLO_RAW_DETECTION_THRESHOLD, verbose=False)
+        # REVERTED: Use YOLO_PRIMARY_DETECTION_CONFIDENCE for initial detection (V6.0 logic)
+        yolo_results_current_frame = yolo_model(pil_frame_rgb, conf=YOLO_PRIMARY_DETECTION_CONFIDENCE, verbose=False)
         
         current_frame_detections = []
         for r in yolo_results_current_frame:
@@ -486,7 +507,6 @@ def run_traffic_monitoring():
             if best_det_idx != -1:
                 det = current_frame_detections.pop(best_det_idx) 
                 
-                # Update velocity and previous center for trajectory prediction
                 cx_new = (det['bbox'][0] + det['bbox'][2]) / 2
                 cy_new = (det['bbox'][1] + det['bbox'][3]) / 2
                 
@@ -495,7 +515,6 @@ def run_traffic_monitoring():
                     vx = cx_new - cx_prev
                     vy = cy_new - cy_prev
                     
-                    # Smooth velocity for more stable trajectory
                     track_obj['velocity_x'] = track_obj.get('velocity_x', 0) * (1 - TRAJECTORY_SMOOTHING_FACTOR) + vx * TRAJECTORY_SMOOTHING_FACTOR
                     track_obj['velocity_y'] = track_obj.get('velocity_y', 0) * (1 - TRAJECTORY_SMOOTHING_FACTOR) + vy * TRAJECTORY_SMOOTHING_FACTOR
                 else:
@@ -513,7 +532,6 @@ def run_traffic_monitoring():
             
             if not matched_this_frame:
                 tracked_objects[track_id]['last_seen_unmatched_count'] = tracked_objects[track_id].get('last_seen_unmatched_count', 0) + 1
-                # If not matched, update prev_bbox_center to current bbox center to prevent jump when re-detected
                 cx_current = (track_obj['bbox'][0] + track_obj['bbox'][2]) / 2
                 cy_current = (track_obj['bbox'][1] + track_obj['bbox'][3]) / 2
                 track_obj['prev_bbox_center'] = (cx_current, cy_current)
@@ -522,7 +540,8 @@ def run_traffic_monitoring():
 
 
         for det in current_frame_detections: 
-            if det['confidence'] >= YOLO_RAW_DETECTION_THRESHOLD: 
+            # New tracks are added if initial confidence is above YOLO_PRIMARY_DETECTION_CONFIDENCE
+            if det['confidence'] >= YOLO_PRIMARY_DETECTION_CONFIDENCE: 
                 cx_new = (det['bbox'][0] + det['bbox'][2]) / 2
                 cy_new = (det['bbox'][1] + det['bbox'][3]) / 2
 
@@ -533,9 +552,10 @@ def run_traffic_monitoring():
                     'last_seen': frame_count,
                     'last_seen_unmatched_count': 0,
                     'confidence_history': deque([det['confidence']], maxlen=CONFIDENCE_SMOOTHING_WINDOW_SIZE),
-                    'velocity_x': 0.0, # Initialize velocity for new objects
+                    'velocity_x': 0.0, 
                     'velocity_y': 0.0,
-                    'prev_bbox_center': (cx_new, cy_new) # Store current center as previous for next frame
+                    'prev_bbox_center': (cx_new, cy_new),
+                    'threat_score': 0.0 # Initialize threat score
                 }
                 next_object_id += 1
         
@@ -549,20 +569,73 @@ def run_traffic_monitoring():
                 continue
             smoothed_conf = sum(track_obj['confidence_history']) / len(track_obj['confidence_history'])
             
-            if smoothed_conf >= YOLO_DISPLAY_THRESHOLD: 
+            # Display objects if smoothed confidence is above a reasonable threshold (YOLO_PRIMARY_DETECTION_CONFIDENCE)
+            # This is the final filter for display and counting.
+            if smoothed_conf >= YOLO_PRIMARY_DETECTION_CONFIDENCE: 
+                # Calculate Threat Score (Feature 5)
+                threat_score = THREAT_BASE_SCORES.get(track_obj['label'], 1) # Base score
+                
+                speed_px_per_frame = math.sqrt(track_obj['velocity_x']**2 + track_obj['velocity_y']**2)
+                threat_score += speed_px_per_frame * THREAT_SPEED_MULTIPLIER
+
+                bbox_area = (track_obj['bbox'][2] - track_obj['bbox'][0]) * (track_obj['bbox'][3] - track_obj['bbox'][1])
+                relative_distance_val = 0
+                if bbox_area > 0:
+                    relative_distance_val = 1.0 / (math.sqrt(bbox_area) / (frame_width * global_ui_scale) + 0.0001)
+                
+                # Inverse distance contributes more if closer
+                threat_score += (THREAT_DISTANCE_INVERSE_MULTIPLIER / (relative_distance_val + 1)) 
+                
+                track_obj['threat_score'] = min(threat_score, 100.0) # Cap threat score at 100
+
                 display_objects.append({
-                    'id': track_id, # Use track_id for display
+                    'id': track_id, 
                     'bbox': track_obj['bbox'],
                     'label': track_obj['label'],
                     'confidence': smoothed_conf,
                     'velocity_x': track_obj['velocity_x'],
-                    'velocity_y': track_obj['velocity_y']
+                    'velocity_y': track_obj['velocity_y'],
+                    'threat_score': track_obj['threat_score']
                 })
                 
                 if track_obj['label'] in ["car", "truck", "bus"]: 
                     current_cars += 1
                 if track_obj['label'] in ACCIDENT_IMPACT_OBJECTS: 
                     current_accident_impact_objects += 1
+
+        # --- Environmental Anomaly Detection (Feature 6) ---
+        current_time = time.time()
+        
+        # Brightness Anomaly
+        current_avg_brightness = np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+        if prev_avg_brightness != -1 and abs(current_avg_brightness - prev_avg_brightness) > BRIGHTNESS_CHANGE_THRESHOLD:
+            if (current_time - LAST_BRIGHTNESS_ALERT_TIME) > ENVIRONMENTAL_ALERT_COOLDOWN:
+                event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Env Anomaly: Sudden Brightness Change ({current_avg_brightness:.1f})")
+                LAST_BRIGHTNESS_ALERT_TIME = current_time
+        prev_avg_brightness = current_avg_brightness
+
+        # Object Density Anomaly (in a small central region, for example)
+        # Define a smaller central region for density check
+        density_roi_x1 = int(frame_width * 0.4)
+        density_roi_y1 = int(frame_height * 0.4)
+        density_roi_x2 = int(frame_width * 0.6)
+        density_roi_y2 = int(frame_height * 0.6)
+        density_roi_area = (density_roi_x2 - density_roi_x1) * (density_roi_y2 - density_roi_y1)
+        
+        objects_in_density_roi = 0
+        for obj in display_objects:
+            bbox = obj['bbox']
+            if not (bbox[0] > density_roi_x2 or bbox[2] < density_roi_x1 or bbox[1] > density_roi_y2 or bbox[3] < density_roi_y1):
+                objects_in_density_roi += 1
+        
+        current_object_density = objects_in_density_roi / (density_roi_area / (frame_width * frame_height) + 0.0001) # Normalized density
+        
+        if prev_object_density != -1 and abs(current_object_density - prev_object_density) > DENSITY_CHANGE_THRESHOLD:
+            if (current_time - LAST_DENSITY_ALERT_TIME) > ENVIRONMENTAL_ALERT_COOLDOWN:
+                event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Env Anomaly: Sudden Density Change ({current_object_density:.2f})")
+                LAST_DENSITY_ALERT_TIME = current_time
+        prev_object_density = current_object_density
+
 
         # Alert Logic (remains largely the same, but uses current_cars/impact_objects from tracked data)
         force_observation = False
@@ -625,8 +698,8 @@ def run_traffic_monitoring():
         hud_corner_radius = max(5, int(HUD_CORNER_RADIUS_BASE * global_ui_scale))
 
 
-        panel_base_width_ratio = 0.22 # Further reduced for more video space
-        panel_base_height_ratio = 0.22 # Further reduced
+        panel_base_width_ratio = 0.22 
+        panel_base_height_ratio = 0.22 
 
 
         # --- Top-left HUD block: Scene, Status, and Action ---
@@ -686,7 +759,7 @@ def run_traffic_monitoring():
         # --- Right Side Panels (Object Classification, Object Details, System Health) ---
         # Panel 2: Object Classification (Top Right)
         panel2_width = max(int(frame_width * panel_base_width_ratio), int(180 * global_ui_scale)) 
-        panel2_height = max(int(frame_height * 0.20), int(150 * global_ui_scale)) # Shorter, just for classification
+        panel2_height = max(int(frame_height * 0.20), int(150 * global_ui_scale)) 
         panel2_x = frame_width - panel2_width - dynamic_padding
         panel2_y = dynamic_padding
 
@@ -703,38 +776,34 @@ def run_traffic_monitoring():
         draw_glowing_line(draw, panel2_x + int(20 * global_ui_scale), panel2_y + int(50 * global_ui_scale), panel2_x + panel2_width - int(20 * global_ui_scale), panel2_y + int(50 * global_ui_scale), HUD_CYAN_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
 
         object_counts_display: Dict[str, int] = {}
-        objects_in_roi_count: Dict[str, int] = {} # For ROI-specific counts
+        objects_in_roi_count: Dict[str, int] = {} 
 
-        # Calculate ROI coordinates
-        roi_x1 = int(frame_width * ROI_RELATIVE_X1)
-        roi_y1 = int(frame_height * ROI_RELATIVE_Y1)
-        roi_x2 = int(frame_width * ROI_RELATIVE_X2)
-        roi_y2 = int(frame_height * ROI_RELATIVE_Y2)
+        roi_x1_abs = int(frame_width * ROI_RELATIVE_X1)
+        roi_y1_abs = int(frame_height * ROI_RELATIVE_Y1)
+        roi_x2_abs = int(frame_width * ROI_RELATIVE_X2)
+        roi_y2_abs = int(frame_height * ROI_RELATIVE_Y2)
 
         for obj in display_objects: 
             object_counts_display[obj['label']] = object_counts_display.get(obj['label'], 0) + 1
-            # Check if object is in ROI for ROI-specific counts
             bbox = obj['bbox']
-            if not (bbox[0] > roi_x2 or bbox[2] < roi_x1 or bbox[1] > roi_y2 or bbox[3] < roi_y1):
+            if not (bbox[0] > roi_x2_abs or bbox[2] < roi_x1_abs or bbox[1] > roi_y2_abs or bbox[3] < roi_y1_abs):
                 objects_in_roi_count[obj['label']] = objects_in_roi_count.get(obj['label'], 0) + 1
 
 
         obj_content_y_start = panel2_y + int(60 * global_ui_scale)
         obj_line_height = font_small_height + int(5 * global_ui_scale)
         
-        # Available height for object list
         available_height_for_obj_list = panel2_height - (obj_content_y_start - panel2_y) - int(10 * global_ui_scale)
         max_lines_obj = max(1, available_height_for_obj_list // obj_line_height)
 
         current_obj_lines_count = 0
         sorted_objects_display = sorted(object_counts_display.items(), key=lambda item: item[1], reverse=True) 
         
-        # Display overall object counts
         draw_hud_text(draw, "Overall:", (panel2_x + int(20 * global_ui_scale), obj_content_y_start), font_small, HUD_TEXT_COLOR_HIGHLIGHT)
         current_obj_lines_count += 1
         
         for obj_label, count in sorted_objects_display:
-            if current_obj_lines_count < max_lines_obj - 1: # Leave space for "TOTAL"
+            if current_obj_lines_count < max_lines_obj - 1: 
                 display_obj_text = f"- {obj_label.capitalize()}: {count}"
                 obj_text_bbox = font_small.getbbox(display_obj_text) 
                 text_w = obj_text_bbox[2] - obj_text_bbox[0] 
@@ -753,10 +822,10 @@ def run_traffic_monitoring():
 
 
         # Panel 3: Object Details & Trajectory (Middle Right)
-        panel3_width = panel2_width # Same width as classification panel
-        panel3_height = max(int(frame_height * 0.25), int(180 * global_ui_scale)) # Taller for details
+        panel3_width = panel2_width 
+        panel3_height = max(int(frame_height * 0.25), int(180 * global_ui_scale)) 
         panel3_x = panel2_x
-        panel3_y = panel2_y + panel2_height + dynamic_padding # Stacked below panel 2
+        panel3_y = panel2_y + panel2_height + dynamic_padding 
 
         draw_hud_box(draw, (panel3_x, panel3_y, panel3_x + panel3_width, panel3_y + panel3_height), HUD_BLUE_DARK_TRANSPARENT, HUD_CYAN_LIGHT, hud_outline_width, hud_corner_radius)
         
@@ -770,17 +839,21 @@ def run_traffic_monitoring():
         max_lines_obj_det = max(1, available_height_for_obj_det_list // obj_det_line_height)
 
         current_obj_det_lines_count = 0
-        # Display details for top 3-5 objects (or as many as fit)
-        for i, obj in enumerate(display_objects):
+        # Display details for top 3-5 objects (or as many as fit), sorted by threat score
+        sorted_display_objects = sorted(display_objects, key=lambda x: x['threat_score'], reverse=True)
+
+        for i, obj in enumerate(sorted_display_objects):
             if current_obj_det_lines_count < max_lines_obj_det:
-                # Approximate speed and distance
                 speed_px_per_frame = math.sqrt(obj['velocity_x']**2 + obj['velocity_y']**2)
-                # A very rough approximation: smaller bbox area means further away
                 bbox_area = (obj['bbox'][2] - obj['bbox'][0]) * (obj['bbox'][3] - obj['bbox'][1])
-                relative_distance = 1.0 / (bbox_area / (frame_width * frame_height) + 0.0001) # Avoid div by zero
-                relative_distance_text = f"{relative_distance:.1f} units" # Use "units" as it's relative
+                relative_distance_val = 0
+                if bbox_area > 0:
+                    relative_distance_val = 1.0 / (math.sqrt(bbox_area) / (frame_width * global_ui_scale) + 0.0001)
                 
-                detail_text = f"ID:{obj['id']} {obj['label']} | Spd:{speed_px_per_frame:.1f}px/f | Dist:{relative_distance_text}"
+                relative_distance_display = f"{min(relative_distance_val, 999.9):.1f}u" 
+                speed_display = f"{speed_px_per_frame:.1f}p/f" 
+
+                detail_text = f"ID:{obj['id']} {obj['label']} | T:{obj['threat_score']:.0f} | Spd:{speed_display} | Dist:{relative_distance_display}"
                 
                 det_text_bbox = font_small.getbbox(detail_text)
                 det_text_w = det_text_bbox[2] - det_text_bbox[0]
@@ -799,10 +872,10 @@ def run_traffic_monitoring():
 
 
         # Panel 4: System Health & Scene Confidence (Bottom Right)
-        panel4_width = panel2_width # Same width
-        panel4_height = max(int(frame_height * 0.25), int(180 * global_ui_scale)) # Adjusted height
+        panel4_width = panel2_width 
+        panel4_height = max(int(frame_height * 0.25), int(180 * global_ui_scale)) 
         panel4_x = panel2_x
-        panel4_y = panel3_y + panel3_height + dynamic_padding # Stacked below panel 3
+        panel4_y = panel3_y + panel3_height + dynamic_padding 
 
         draw_hud_box(draw, (panel4_x, panel4_y, panel4_x + panel4_width, panel4_y + panel4_height), HUD_BLUE_DARK_TRANSPARENT, HUD_GREEN_LIGHT, hud_outline_width, hud_corner_radius)
         
@@ -856,13 +929,11 @@ def run_traffic_monitoring():
                 draw_hud_text(draw, display_sys_text, (panel4_x + int(20 * global_ui_scale), sys_content_y_start + i * sys_line_height), font_small, HUD_TEXT_COLOR_SECONDARY)
 
         # --- Scene Confidence Bar Graph (Bottom of Panel 4) ---
-        # Calculate available height for graph within panel 4, after system health lines
         graph_title_bbox = font_small.getbbox("SCENE CONFIDENCE:") 
         graph_title_height_actual = graph_title_bbox[3] - graph_title_bbox[1] 
         
-        # Calculate remaining height in panel4 for graph after sys_lines
         remaining_height_for_graph = panel4_height - (sys_content_y_start + max_sys_lines * sys_line_height - panel4_y) - int(10 * global_ui_scale) - graph_title_height_actual
-        graph_height_actual = max(int(frame_height * 0.08), remaining_height_for_graph) # Min height or remaining
+        graph_height_actual = max(int(frame_height * 0.08), remaining_height_for_graph) 
 
         graph_y_start = panel4_y + panel4_height - graph_height_actual - int(10 * global_ui_scale)
         
@@ -927,7 +998,7 @@ def run_traffic_monitoring():
         status_bar_y = frame_height - status_bar_height
         draw.rectangle((0, status_bar_y, frame_width, frame_height), fill=HUD_BLUE_DARK_TRANSPARENT, outline=HUD_BLUE_LIGHT, width=hud_outline_width)
         
-        temp_text = "28°C Cloudy" # Simulated
+        temp_text = "28°C Cloudy" 
         time_text = datetime.now().strftime('%H:%M:%S')
         date_text = datetime.now().strftime('%d-%m-%Y')
 
@@ -943,8 +1014,16 @@ def run_traffic_monitoring():
             conf = obj['confidence']
             obj_id = obj['id'] 
             vx, vy = obj['velocity_x'], obj['velocity_y']
+            threat_score = obj['threat_score']
 
-            color = BBOX_COLORS.get(label, (200, 200, 200))
+            # Dynamic bounding box color based on threat score (Feature 5)
+            if threat_score >= 80:
+                color = HUD_RED_CRITICAL[:3] # Red for high threat
+            elif threat_score >= 50:
+                color = HUD_YELLOW_ACCENT[:3] # Yellow for medium threat
+            else:
+                color = BBOX_COLORS.get(label, (200, 200, 200)) # Default color
+            
             color_with_alpha = color + (180,) 
             
             # Draw bounding box
@@ -954,34 +1033,29 @@ def run_traffic_monitoring():
             center_x = (x1 + x2) / 2
             center_y = (y1 + y2) / 2
             
-            # Normalize velocity vector to TRAJECTORY_PREDICTION_LENGTH
             velocity_magnitude = math.sqrt(vx**2 + vy**2)
             if velocity_magnitude > 0:
                 norm_vx = (vx / velocity_magnitude) * TRAJECTORY_PREDICTION_LENGTH * global_ui_scale
                 norm_vy = (vy / velocity_magnitude) * TRAJECTORY_PREDICTION_LENGTH * global_ui_scale
             else:
-                norm_vx, norm_vy = 0, 0 # No movement
+                norm_vx, norm_vy = 0, 0 
 
             traj_end_x = int(center_x + norm_vx)
             traj_end_y = int(center_y + norm_vy)
             
-            # Draw glowing trajectory line
             draw_glowing_line(draw, int(center_x), int(center_y), traj_end_x, traj_end_y, color + (100,), base_width=max(1, int(2 * global_ui_scale)))
 
 
-            # Prepare text label with ID, smoothed confidence, and metadata
             speed_px_per_frame = math.sqrt(vx**2 + vy**2)
             bbox_area = (x2 - x1) * (y2 - y1)
-            # A more robust relative distance: inverse of sqrt of area, normalized
             relative_distance_val = 0
             if bbox_area > 0:
                 relative_distance_val = 1.0 / (math.sqrt(bbox_area) / (frame_width * global_ui_scale) + 0.0001)
             
-            # Limit display to 2 decimal places and a reasonable max value for relative distance
-            relative_distance_display = f"{min(relative_distance_val, 999.9):.1f}u" # 'u' for units
-            speed_display = f"{speed_px_per_frame:.1f}p/f" # 'p/f' for pixels per frame
+            relative_distance_display = f"{min(relative_distance_val, 999.9):.1f}u" 
+            speed_display = f"{speed_px_per_frame:.1f}p/f" 
 
-            text_label = f"{label.upper()} ({conf:.2f}) ID:{obj_id} Spd:{speed_display} Dist:{relative_distance_display}" 
+            text_label = f"{label.upper()} ({conf:.2f}) ID:{obj_id} T:{threat_score:.0f}" # Include threat score in main label
             bbox_font_small = font_small
             
             bbox_label_metrics = bbox_font_small.getbbox(text_label)
@@ -1009,20 +1083,24 @@ def run_traffic_monitoring():
             draw_rounded_rectangle(draw, [text_x - max(1, int(2 * global_ui_scale)), text_y - max(1, int(2 * global_ui_scale)), text_x + text_w + max(1, int(4 * global_ui_scale)), text_y + text_h + max(1, int(4 * global_ui_scale))], radius=max(1, int(4 * global_ui_scale)), fill=color_with_alpha)
             draw.text((text_x, text_y), text_label, fill=(0,0,0), font=bbox_font_small)
 
+            # Draw speed and distance below the main label if space allows or as separate lines
+            # For a cleaner look, let's put speed and distance in the OBJECT DETAILS panel.
+            # This is to avoid cluttering the main bounding box label.
+
+
         # --- Draw ROI Highlight (Feature 4) ---
-        roi_x1 = int(frame_width * ROI_RELATIVE_X1)
-        roi_y1 = int(frame_height * ROI_RELATIVE_Y1)
-        roi_x2 = int(frame_width * ROI_RELATIVE_X2)
-        roi_y2 = int(frame_height * ROI_RELATIVE_Y2)
+        roi_x1_abs = int(frame_width * ROI_RELATIVE_X1)
+        roi_y1_abs = int(frame_height * ROI_RELATIVE_Y1)
+        roi_x2_abs = int(frame_width * ROI_RELATIVE_X2)
+        roi_y2_abs = int(frame_height * ROI_RELATIVE_Y2)
         
-        draw_rounded_rectangle(draw, (roi_x1, roi_y1, roi_x2, roi_y2), radius=max(5, int(10 * global_ui_scale)), 
+        draw_rounded_rectangle(draw, (roi_x1_abs, roi_y1_abs, roi_x2_abs, roi_y2_abs), radius=max(5, int(10 * global_ui_scale)), 
                                fill=ROI_HIGHLIGHT_COLOR, outline=ROI_BORDER_COLOR, width=max(1, int(3 * global_ui_scale)))
-        draw_hud_text(draw, "ROI ACTIVE (Press 'T' to Tag)", (roi_x1 + int(10 * global_ui_scale), roi_y1 + int(10 * global_ui_scale)), font_small, ROI_BORDER_COLOR)
+        draw_hud_text(draw, "ROI ACTIVE (Press 'T' to Tag)", (roi_x1_abs + int(10 * global_ui_scale), roi_y1_abs + int(10 * global_ui_scale)), font_small, ROI_BORDER_COLOR)
         
-        # Display ROI-specific object counts
         roi_total_objects = sum(objects_in_roi_count.values())
         roi_count_text = f"ROI Objects: {roi_total_objects}"
-        draw_hud_text(draw, roi_count_text, (roi_x1 + int(10 * global_ui_scale), roi_y1 + int(10 * global_ui_scale) + font_small_height + int(5 * global_ui_scale)), font_small, HUD_TEXT_COLOR_HIGHLIGHT)
+        draw_hud_text(draw, roi_count_text, (roi_x1_abs + int(10 * global_ui_scale), roi_y1_abs + int(10 * global_ui_scale) + font_small_height + int(5 * global_ui_scale)), font_small, HUD_TEXT_COLOR_HIGHLIGHT)
 
 
         # --- Composite the HUD layer onto the original frame ---
