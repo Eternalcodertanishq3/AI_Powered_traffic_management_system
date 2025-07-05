@@ -25,12 +25,14 @@ from .detection_model import get_scene_prediction
 # VIDEO INPUT SOURCE CONFIGURATION ──────────────────────────────────
 # UNCOMMENT only ONE of the following options:
 # VIDEO_INPUT_SOURCE = "WEBCAM"
-VIDEO_INPUT_SOURCE = r"C:\Personal Projects\AI_Powered_traffic_management_system\data\gettyimages-1665798929-640_adpp.mp4" # Example video path
+VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/gettyimages-1936679257-640_adpp.mp4" # Example video path
 # VIDEO_INPUT_SOURCE = r"C:/Personal Projects/AI_Powered_traffic_management_system/data/sample_traffic_video.mp4" # Another example
 # ───────────────────────────────────────────────────────────────────
 
 # Frame processing interval (process every Nth frame for performance)
-FRAME_PROCESS_INTERVAL = 1
+# Increased to process every 5th frame for significantly better playback speed.
+# Detections will update less frequently, but video will be smoother.
+FRAME_PROCESS_INTERVAL = 5 
 
 # --- SCENE CLASSIFICATION & ALERTING LOGIC CONFIG ---
 SCENE_SMOOTHING_WINDOW_SIZE = 20 
@@ -49,7 +51,6 @@ MIN_IMPACT_OBJECTS_FOR_ACCIDENT = 1
 
 
 # --- YOLO DETECTION CONFIG (REVERTED TO V6.0 CORE) ---
-# This is the *only* confidence YOLO uses for its raw detections.
 YOLO_PRIMARY_DETECTION_CONFIDENCE = 0.25 
 
 # --- JARVIS FEATURES CONFIG ---
@@ -66,17 +67,16 @@ TRAJECTORY_PREDICTION_LENGTH = 70
 TRAJECTORY_SMOOTHING_FACTOR = 0.8 
 
 # Feature 4: Region of Interest (ROI) Analysis & Data Tagging
-# ROI will be indicated within the UI panels, not as a large overlay on video.
-ROI_TAG_KEY = ord('t') # Keyboard key to tag event within ROI
+ROI_TAG_KEY = ord('t') 
 
 # Feature 5: Threat Assessment & Prioritization
 THREAT_BASE_SCORES = {
-    "person": 5, "bicycle": 3, "car": 2, "motorcycle": 3, "bus": 4, "truck": 4,
-    "stalled_vehicle": 8, "debris_on_road": 7, "overturned_vehicle": 10, "fire": 10,
-    "emergency_vehicle_passing": 6 
+    "person": 50, "bicycle": 30, "car": 20, "motorcycle": 30, "bus": 40, "truck": 40,
+    "stalled_vehicle": 80, "debris_on_road": 70, "overturned_vehicle": 100, "fire": 100,
+    "emergency_vehicle_passing": 60 
 }
-THREAT_SPEED_MULTIPLIER = 0.1 
-THREAT_DISTANCE_INVERSE_MULTIPLIER = 50 
+THREAT_SPEED_MULTIPLIER = 0.5 
+THREAT_DISTANCE_INVERSE_MULTIPLIER = 100 
 
 # Feature 6: Environmental Anomaly Detection
 BRIGHTNESS_CHANGE_THRESHOLD = 30 
@@ -86,44 +86,89 @@ LAST_DENSITY_ALERT_TIME = 0
 ENVIRONMENTAL_ALERT_COOLDOWN = 10 
 
 # Feature 7: Number Plate Recognition (NPR) & Online Data Fetch (SIMULATED)
-# Store detected plates and their simulated data
 simulated_plate_data: Dict[str, Dict[str, str]] = {}
 def generate_simulated_plate_data(plate_num: str) -> Dict[str, str]:
     """Generates simulated data for a given number plate."""
     if plate_num not in simulated_plate_data:
         owner_names = ["John Doe", "Jane Smith", "Robert Johnson", "Emily Davis", "Michael Brown"]
-        vehicle_types = ["Sedan", "SUV", "Hatchback", "Truck", "Minivan"]
+        vehicle_types = ["Sedan", "SUV", "Hatchback", "Truck", "Minivan", "Motorcycle"]
         statuses = ["Registered", "Expired (Alert)", "Stolen (CRITICAL)", "Pending"]
+        colors = ["Red", "Blue", "Black", "White", "Silver", "Grey", "Green", "Yellow"]
+        makes = ["Generic Motors", "Universal Auto", "Apex Vehicles", "Global Trans"]
         
         owner = random.choice(owner_names)
         vehicle = random.choice(vehicle_types)
         status = random.choice(statuses)
-        
+        color = random.choice(colors)
+        make = random.choice(makes)
+
         simulated_plate_data[plate_num] = {
             "Owner": owner,
             "Vehicle Type": vehicle,
+            "Color": color,
+            "Make": make,
             "Registration Status": status,
             "Last Scanned": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
     return simulated_plate_data[plate_num]
 
+# Store all unique detected plates
+all_detected_plates = deque(maxlen=50) # Keep a history of last 50 unique plates
+
 # Feature 8: Advanced Lane & Road Boundary Detection (Visual Enhancement)
-LANE_LINE_COLOR = (0, 255, 0, 100) # Green, transparent
-LANE_LINE_THICKNESS = 3 # Base thickness
+LANE_LINE_COLOR = (0, 255, 0, 100) 
+LANE_LINE_THICKNESS = 3 
+
+# Feature 9: Vehicle Signature Analysis (SIMULATED)
+def generate_vehicle_signature(label: str) -> Dict[str, str]:
+    """Generates a simulated vehicle signature."""
+    colors = ["Red", "Blue", "Black", "White", "Silver", "Grey", "Green", "Yellow"]
+    makes_car = ["Generic Sedan", "Universal SUV", "Apex Hatchback"]
+    makes_truck_bus = ["Global Trucking", "Heavy Haul Co.", "City Transit"]
+
+    sig = {"Type": label.capitalize()}
+    sig["Color"] = random.choice(colors)
+    if label == "car":
+        sig["Make"] = random.choice(makes_car)
+    elif label in ["truck", "bus"]:
+        sig["Make"] = random.choice(makes_truck_bus)
+    else:
+        sig["Make"] = "N/A"
+    return sig
+
+# Feature 10: Predictive Incident Warning
+COLLISION_PROXIMITY_THRESHOLD = 50 # Pixels
+COLLISION_ANGLE_THRESHOLD = 150 # Degrees (180 means directly towards each other)
+LAST_COLLISION_ALERT_TIME = 0
+COLLISION_ALERT_COOLDOWN = 5 # Seconds
+
+# Feature 11: Traffic Flow Analysis & Anomaly Detection
+# Define zones for traffic flow analysis (e.g., 3 vertical zones)
+TRAFFIC_ZONE_COUNT = 3
+TRAFFIC_FLOW_SPEED_THRESHOLD_SLOWDOWN = 0.5 # Percentage drop from avg speed to be considered slowdown
+LAST_TRAFFIC_FLOW_ALERT_TIME = 0
+TRAFFIC_FLOW_ALERT_COOLDOWN = 15 # Seconds
+
+# Feature 12: Driver Behavior Monitoring (Simulated)
+TAILGATING_DISTANCE_THRESHOLD = 80 # Pixels
+TAILGATING_SPEED_DIFF_THRESHOLD = 5 # Pixels/frame
+AGGRESSIVE_LANE_CHANGE_THRESHOLD = 50 # Pixels horizontal movement in short time
+LAST_DRIVER_BEHAVIOR_ALERT_TIME = 0
+DRIVER_BEHAVIOR_ALERT_COOLDOWN = 10 # Seconds
 
 
 # --- UI Styling (Iron Man / JARVIS Vibe) ---
 # RGBA colors for transparency (even more transparent for non-critical states)
-HUD_BLUE_DARK_TRANSPARENT = (10, 20, 50, 40) # Even more transparent (was 60)
-HUD_BLUE_MEDIUM_TRANSPARENT = (20, 60, 100, 20) # Even more transparent (was 40)
-HUD_BLUE_LIGHT = (30, 144, 255, 100) # More transparent
-HUD_CYAN_LIGHT = (0, 255, 255, 100)     
-HUD_GREEN_LIGHT = (0, 255, 127, 100)    
-HUD_YELLOW_ACCENT = (255, 255, 0, 100)  
-HUD_RED_CRITICAL = (255, 69, 0, 160)    # Slightly less transparent for critical
-HUD_TEXT_COLOR_PRIMARY = (220, 240, 255, 255) 
-HUD_TEXT_COLOR_SECONDARY = (180, 200, 255, 255) 
-HUD_TEXT_COLOR_HIGHLIGHT = (0, 255, 255, 255) 
+HUD_BLUE_DARK_TRANSPARENT = (10, 20, 50, 20) 
+HUD_BLUE_MEDIUM_TRANSPARENT = (20, 60, 100, 10) 
+HUD_BLUE_LIGHT = (30, 144, 255, 80) 
+HUD_CYAN_LIGHT = (0, 255, 255, 80)     
+HUD_GREEN_LIGHT = (0, 255, 127, 80)    
+HUD_YELLOW_ACCENT = (255, 255, 0, 80)  
+HUD_RED_CRITICAL = (255, 69, 0, 150)    
+HUD_TEXT_COLOR_PRIMARY = (255, 255, 255, 255) # Pure white for max visibility
+HUD_TEXT_COLOR_SECONDARY = (200, 220, 255, 255) # Lighter blue for secondary
+HUD_TEXT_COLOR_HIGHLIGHT = (0, 255, 255, 255) # Pure cyan for highlights
 HUD_OUTLINE_WIDTH_BASE = 2 
 HUD_CORNER_RADIUS_BASE = 15 
 
@@ -205,7 +250,8 @@ frame_counter_for_animation = 0
 # Each tracked_object will be a dict:
 # { 'id': unique_id, 'bbox': [x1, y1, x2, y2], 'label': 'car', 'last_seen': frame_num,
 #   'confidence_history': deque, 'velocity_x': 0, 'velocity_y': 0, 'prev_bbox_center': (cx, cy),
-#   'threat_score': 0, 'plate_number': None, 'plate_data': {} }
+#   'threat_score': 0, 'plate_number': None, 'plate_data': {}, 'vehicle_signature': {},
+#   'is_collision_alert': False, 'horizontal_movement_history': deque }
 tracked_objects = {}
 next_object_id = 0
 
@@ -214,6 +260,13 @@ prev_avg_brightness = -1
 prev_object_density = -1 
 LAST_BRIGHTNESS_ALERT_TIME = 0
 LAST_DENSITY_ALERT_TIME = 0
+
+# --- Traffic Flow Analysis Globals ---
+traffic_zone_speeds = [deque(maxlen=10) for _ in range(TRAFFIC_ZONE_COUNT)] # Avg speeds per zone
+LAST_TRAFFIC_FLOW_ALERT_TIME = 0
+
+# --- Driver Behavior Globals ---
+LAST_DRIVER_BEHAVIOR_ALERT_TIME = 0
 
 # --- Helper function for IoU (Intersection over Union) ---
 def calculate_iou(box1, box2):
@@ -246,13 +299,11 @@ def draw_hud_box(draw: ImageDraw.ImageDraw, xy: Tuple[int, int, int, int], fill:
     """Draws a solid filled box with rounded corners and an outline."""
     draw_rounded_rectangle(draw, xy, corner_radius, fill=fill, outline=outline, width=thickness)
 
-def draw_hud_text(draw: ImageDraw.ImageDraw, text: str, position: Tuple[int, int], font: ImageFont.FreeTypeFont, text_color: Tuple[int, int, int, int], bg_color: Tuple[int, int, int, int] = None, outline_color: Tuple[int, int, int, int] = None, outline_width: int = 0):
+def draw_hud_text(draw: ImageDraw.ImageDraw, text: str, position: Tuple[int, int], font: ImageFont.FreeTypeFont, text_color: Tuple[int, int, int, int], outline_color: Tuple[int, int, int, int] = None, outline_width: int = 0):
     """
-    Draws text on the HUD with optional background and outline for better visibility.
+    Draws text on the HUD with optional outline for better visibility.
+    Increased outline width for crystal clarity.
     """
-    if bg_color:
-        text_bbox = draw.textbbox(position, text, font=font)
-        draw.rectangle(text_bbox, fill=bg_color)
     if outline_color and outline_width > 0:
         # Draw outline by drawing text multiple times with offset
         for x_offset in range(-outline_width, outline_width + 1):
@@ -341,7 +392,7 @@ def draw_bar_graph(draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height
         bar_color = SCENE_LABEL_COLORS.get(label, base_color)
         draw_rounded_rectangle(draw, (bar_x1, bar_y1, bar_x2, bar_y2), max(1, int(3 * ui_scale_factor)), fill=bar_color+(150,), outline=bar_color, width=1)
         
-        draw_hud_text(draw, f"{value:.2f}", (bar_x1, bar_y1 - font_height - max(1, int(2 * ui_scale_factor))), font, HUD_TEXT_COLOR_PRIMARY)
+        draw_hud_text(draw, f"{value:.2f}", (bar_x1, bar_y1 - font_height - max(1, int(2 * ui_scale_factor))), font, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,150), outline_width=2)
         
         display_label = label.replace('_', ' ')
         label_bbox = font.getbbox(display_label)
@@ -355,13 +406,14 @@ def draw_bar_graph(draw: ImageDraw.ImageDraw, x: int, y: int, width: int, height
             else:
                 display_label = "" 
         
-        draw_hud_text(draw, display_label, (bar_x1, bar_y2 + max(1, int(2 * ui_scale_factor))), font, HUD_TEXT_COLOR_SECONDARY)
+        draw_hud_text(draw, display_label, (bar_x1, bar_y2 + max(1, int(2 * ui_scale_factor))), font, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,150), outline_width=2)
 
 
 def run_traffic_monitoring():
     global current_alert_level, consecutive_accident_frames, last_alert_timestamp, frame_counter_for_animation
     global tracked_objects, next_object_id 
     global prev_avg_brightness, prev_object_density, LAST_BRIGHTNESS_ALERT_TIME, LAST_DENSITY_ALERT_TIME
+    global LAST_COLLISION_ALERT_TIME, LAST_TRAFFIC_FLOW_ALERT_TIME, LAST_DRIVER_BEHAVIOR_ALERT_TIME
 
     cap = None
     if VIDEO_INPUT_SOURCE == "WEBCAM":
@@ -420,9 +472,9 @@ def run_traffic_monitoring():
     global_ui_scale_h = frame_height / UI_DESIGN_BASE_HEIGHT
     global_ui_scale = min(global_ui_scale_w, global_ui_scale_h) 
 
-    hud_font_size_main_scaled = max(14, int(28 * global_ui_scale)) 
-    hud_font_size_sub_scaled = max(10, int(20 * global_ui_scale)) 
-    hud_font_size_small_scaled = max(8, int(14 * global_ui_scale)) 
+    hud_font_size_main_scaled = max(16, int(30 * global_ui_scale)) 
+    hud_font_size_sub_scaled = max(12, int(22 * global_ui_scale)) 
+    hud_font_size_small_scaled = max(10, int(16 * global_ui_scale)) 
 
     font_main = ImageFont.truetype(default_font_path, hud_font_size_main_scaled) if os.path.exists(default_font_path) else ImageFont.load_default()
     font_sub = ImageFont.truetype(default_font_path, hud_font_size_sub_scaled) if os.path.exists(default_font_path) else ImageFont.load_default()
@@ -439,8 +491,9 @@ def run_traffic_monitoring():
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("[JARVIS-LOG] End of video or stream disconnected. Initiating shutdown sequence.")
-            break
+            # If video ends, reset to beginning to loop
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            continue
 
         frame = cv2.resize(frame, (frame_width, frame_height), interpolation=cv2.INTER_AREA)
 
@@ -451,8 +504,6 @@ def run_traffic_monitoring():
         if key == ord('q'):
             break
         elif key == ROI_TAG_KEY:
-            # ROI is now a conceptual region for tagging, not a visual overlay
-            # We will use a central ROI for tagging purposes if no specific region is provided
             roi_x1_abs = int(frame_width * 0.3)
             roi_y1_abs = int(frame_height * 0.3)
             roi_x2_abs = int(frame_width * 0.7)
@@ -469,201 +520,258 @@ def run_traffic_monitoring():
             else:
                 event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - ROI Tagged: No objects detected in ROI.")
 
+        # Only perform expensive detection/processing every N frames
+        if frame_count % FRAME_PROCESS_INTERVAL == 0:
+            pil_frame_rgb = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            scene_report = get_scene_prediction(pil_frame_rgb)
+            current_scene_label = scene_report["main_prediction"]
+            scene_confidence = scene_report["main_confidence"]
+            top_predictions_for_graph = scene_report["all_predictions"]
 
-        hud_layer = Image.new('RGBA', (frame_width, frame_height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(hud_layer)
+            if scene_confidence >= MIN_SCENE_CONFIDENCE_DISPLAY:
+                scene_prediction_history.append(current_scene_label)
 
-        # --- Draw Wireframe Overlay (Behind other elements, with animation) ---
-        draw_wireframe_element(draw, frame_width, frame_height, HUD_BLUE_LIGHT, base_thickness=2, animation_frame=frame_counter_for_animation, ui_scale_factor=global_ui_scale)
-
-        # --- Advanced Lane & Road Boundary Detection (Feature 8) ---
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blurred_frame = cv2.GaussianBlur(gray_frame, (5, 5), 0)
-        edges = cv2.Canny(blurred_frame, 50, 150) # Canny edge detection
-
-        # Hough Line Transform to detect lines
-        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, minLineLength=50, maxLineGap=10)
-        
-        if lines is not None:
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
-                # Filter for mostly horizontal or vertical lines (adjust angles as needed for lanes)
-                angle = np.arctan2(y2 - y1, x2 - x1) * 180. / np.pi
-                if 10 < abs(angle) < 170: # Filter out near horizontal/vertical lines, focus on angled lanes
-                    draw_glowing_line(draw, x1, y1, x2, y2, LANE_LINE_COLOR, base_width=max(1, int(LANE_LINE_THICKNESS * global_ui_scale)))
-
-
-        pil_frame_rgb = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        scene_report = get_scene_prediction(pil_frame_rgb)
-        current_scene_label = scene_report["main_prediction"]
-        scene_confidence = scene_report["main_confidence"]
-        top_predictions_for_graph = scene_report["all_predictions"]
-
-        if scene_confidence >= MIN_SCENE_CONFIDENCE_DISPLAY:
-            scene_prediction_history.append(current_scene_label)
-
-        most_common_scene = "N/A"
-        smoothed_scene_confidence = 0.0
-        if scene_prediction_history:
-            label_counts = {}
-            for label in scene_prediction_history:
-                label_counts[label] = label_counts.get(label, 0) + 1
-            
-            if label_counts:
-                most_common_scene = max(label_counts, key=label_counts.get)
-                smoothed_scene_confidence = label_counts[most_common_scene] / len(scene_prediction_history)
-
-
-        # --- Alert Level Logic & Smart Accident Filter ---
-        current_cars = 0
-        current_accident_impact_objects = 0
-        
-        # --- Object Detection & Tracking (JARVIS Feature 1 & 2) ---
-        # REVERTED: Use YOLO_PRIMARY_DETECTION_CONFIDENCE for initial detection (V6.0 logic)
-        yolo_results_current_frame = yolo_model(pil_frame_rgb, conf=YOLO_PRIMARY_DETECTION_CONFIDENCE, verbose=False)
-        
-        current_frame_detections = []
-        for r in yolo_results_current_frame:
-            for box in r.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                conf = float(box.conf[0])
-                cls_id = int(box.cls[0])
-                label = yolo_model.names[cls_id]
+            most_common_scene = "N/A"
+            smoothed_scene_confidence = 0.0
+            if scene_prediction_history:
+                label_counts = {}
+                for label in scene_prediction_history:
+                    label_counts[label] = label_counts.get(label, 0) + 1
                 
-                if label in YOLO_CLASSES: 
-                    current_frame_detections.append({
-                        'bbox': [x1, y1, x2, y2],
-                        'label': label,
-                        'confidence': conf
+                if label_counts:
+                    most_common_scene = max(label_counts, key=label_counts.get)
+                    smoothed_scene_confidence = label_counts[most_common_scene] / len(scene_prediction_history)
+
+
+            # --- Object Detection & Tracking (JARVIS Feature 1 & 2) ---
+            yolo_results_current_frame = yolo_model(pil_frame_rgb, conf=YOLO_PRIMARY_DETECTION_CONFIDENCE, verbose=False)
+            
+            current_frame_detections = []
+            for r in yolo_results_current_frame:
+                for box in r.boxes:
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    conf = float(box.conf[0])
+                    cls_id = int(box.cls[0])
+                    label = yolo_model.names[cls_id]
+                    
+                    if label in YOLO_CLASSES: 
+                        current_frame_detections.append({
+                            'bbox': [x1, y1, x2, y2],
+                            'label': label,
+                            'confidence': conf
+                        })
+
+            matched_track_ids = set()
+            for track_id, track_obj in list(tracked_objects.items()): 
+                matched_this_frame = False
+                best_iou = 0.0
+                best_det_idx = -1
+
+                for i, det in enumerate(current_frame_detections):
+                    if det['label'] != track_obj['label']:
+                        continue
+
+                    iou = calculate_iou(track_obj['bbox'], det['bbox'])
+                    if iou > best_iou and iou > IOU_THRESHOLD_FOR_TRACKING:
+                        best_iou = iou
+                        best_det_idx = i
+                
+                if best_det_idx != -1:
+                    det = current_frame_detections.pop(best_det_idx) 
+                    
+                    cx_new = (det['bbox'][0] + det['bbox'][2]) / 2
+                    cy_new = (det['bbox'][1] + det['bbox'][3]) / 2
+                    
+                    if 'prev_bbox_center' in track_obj and track_obj['prev_bbox_center'] is not None:
+                        cx_prev, cy_prev = track_obj['prev_bbox_center']
+                        vx = cx_new - cx_prev
+                        vy = cy_new - cy_prev
+                        
+                        track_obj['velocity_x'] = track_obj.get('velocity_x', 0) * (1 - TRAJECTORY_SMOOTHING_FACTOR) + vx * TRAJECTORY_SMOOTHING_FACTOR
+                        track_obj['velocity_y'] = track_obj.get('velocity_y', 0) * (1 - TRAJECTORY_SMOOTHING_FACTOR) + vy * TRAJECTORY_SMOOTHING_FACTOR
+                        
+                        # Store horizontal movement for aggressive lane change (Feature 12)
+                        if 'horizontal_movement_history' not in track_obj:
+                            track_obj['horizontal_movement_history'] = deque(maxlen=5) # Last 5 frames
+                        track_obj['horizontal_movement_history'].append(abs(vx))
+
+                    else:
+                        track_obj['velocity_x'] = 0
+                        track_obj['velocity_y'] = 0
+                        track_obj['horizontal_movement_history'] = deque(maxlen=5)
+
+
+                    track_obj['bbox'] = det['bbox'] 
+                    track_obj['last_seen'] = frame_count
+                    track_obj['prev_bbox_center'] = (cx_new, cy_new)
+
+                    if det['confidence'] >= MIN_CONF_FOR_SMOOTHING_HISTORY: 
+                        tracked_objects[track_id]['confidence_history'].append(det['confidence'])
+                    matched_track_ids.add(track_id)
+                    matched_this_frame = True
+                
+                if not matched_this_frame:
+                    tracked_objects[track_id]['last_seen_unmatched_count'] = tracked_objects[track_id].get('last_seen_unmatched_count', 0) + 1
+                    cx_current = (track_obj['bbox'][0] + track_obj['bbox'][2]) / 2
+                    cy_current = (track_obj['bbox'][1] + track_obj['bbox'][3]) / 2
+                    track_obj['prev_bbox_center'] = (cx_current, cy_current)
+                else:
+                    tracked_objects[track_id]['last_seen_unmatched_count'] = 0 
+
+
+            for det in current_frame_detections: 
+                if det['confidence'] >= YOLO_PRIMARY_DETECTION_CONFIDENCE: 
+                    cx_new = (det['bbox'][0] + det['bbox'][2]) / 2
+                    cy_new = (det['bbox'][1] + det['bbox'][3]) / 2
+
+                    plate_num = None
+                    plate_data = {}
+                    if det['label'] in ["car", "truck"]:
+                        # Simulate number plate recognition (10% chance to "recognize" a plate)
+                        if random.random() < 0.1: 
+                            # Generate a generic alphanumeric plate
+                            plate_num = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=7))
+                            plate_data = generate_simulated_plate_data(plate_num)
+                            # Add unique plate to history
+                            if plate_num not in all_detected_plates:
+                                all_detected_plates.append(plate_num)
+
+
+                    tracked_objects[next_object_id] = {
+                        'id': next_object_id,
+                        'bbox': det['bbox'],
+                        'label': det['label'],
+                        'last_seen': frame_count,
+                        'last_seen_unmatched_count': 0,
+                        'confidence_history': deque([det['confidence']], maxlen=CONFIDENCE_SMOOTHING_WINDOW_SIZE),
+                        'velocity_x': 0.0, 
+                        'velocity_y': 0.0,
+                        'prev_bbox_center': (cx_new, cy_new),
+                        'threat_score': 0.0,
+                        'plate_number': plate_num, 
+                        'plate_data': plate_data,
+                        'vehicle_signature': generate_vehicle_signature(det['label']), # Feature 9
+                        'is_collision_alert': False,
+                        'horizontal_movement_history': deque(maxlen=5)
+                    }
+                    next_object_id += 1
+            
+            tracks_to_delete = [track_id for track_id, track_obj in tracked_objects.items() if track_obj['last_seen_unmatched_count'] > MAX_TRACKING_AGE]
+            for track_id in tracks_to_delete:
+                del tracked_objects[track_id]
+
+            # Update display_objects only when processing a full frame
+            display_objects = []
+            for track_id, track_obj in tracked_objects.items():
+                if not track_obj['confidence_history']: 
+                    continue
+                smoothed_conf = sum(track_obj['confidence_history']) / len(track_obj['confidence_history'])
+                
+                if smoothed_conf >= YOLO_PRIMARY_DETECTION_CONFIDENCE: 
+                    # Calculate Threat Score (Feature 5)
+                    threat_score = THREAT_BASE_SCORES.get(track_obj['label'], 1) 
+                    
+                    speed_px_per_frame = math.sqrt(track_obj['velocity_x']**2 + track_obj['velocity_y']**2)
+                    threat_score += speed_px_per_frame * THREAT_SPEED_MULTIPLIER
+
+                    bbox_area = (track_obj['bbox'][2] - track_obj['bbox'][0]) * (track_obj['bbox'][3] - track_obj['bbox'][1])
+                    relative_distance_val = 0
+                    if bbox_area > 0:
+                        relative_distance_val = 1.0 / (math.sqrt(bbox_area) / (frame_width * global_ui_scale) + 0.0001)
+                    
+                    threat_score += (THREAT_DISTANCE_INVERSE_MULTIPLIER / (relative_distance_val + 1)) 
+                    
+                    track_obj['threat_score'] = min(threat_score, 100.0) 
+
+                    display_objects.append({
+                        'id': track_id, 
+                        'bbox': track_obj['bbox'],
+                        'label': track_obj['label'],
+                        'confidence': smoothed_conf,
+                        'velocity_x': track_obj['velocity_x'],
+                        'velocity_y': track_obj['velocity_y'],
+                        'threat_score': track_obj['threat_score'],
+                        'plate_number': track_obj['plate_number'], 
+                        'plate_data': track_obj['plate_data'],
+                        'vehicle_signature': track_obj['vehicle_signature'] # Feature 9
+                    })
+                    
+                    if track_obj['label'] in ["car", "truck", "bus"]: 
+                        current_cars += 1
+                    if track_obj['label'] in ACCIDENT_IMPACT_OBJECTS: 
+                        current_accident_impact_objects += 1
+        else:
+            # If not processing a full frame, just update last_seen for existing objects
+            # and clear collision alerts if cooldown has passed
+            for track_id, track_obj in list(tracked_objects.items()):
+                track_obj['last_seen_unmatched_count'] += 1
+                if track_obj['last_seen_unmatched_count'] > MAX_TRACKING_AGE:
+                    del tracked_objects[track_id]
+            
+            # Re-build display_objects from tracked_objects for drawing, but don't re-run detection
+            display_objects = []
+            for track_id, track_obj in tracked_objects.items():
+                if not track_obj['confidence_history']: continue
+                smoothed_conf = sum(track_obj['confidence_history']) / len(track_obj['confidence_history'])
+                if smoothed_conf >= YOLO_PRIMARY_DETECTION_CONFIDENCE:
+                    display_objects.append({
+                        'id': track_id, 
+                        'bbox': track_obj['bbox'],
+                        'label': track_obj['label'],
+                        'confidence': smoothed_conf,
+                        'velocity_x': track_obj['velocity_x'],
+                        'velocity_y': track_obj['velocity_y'],
+                        'threat_score': track_obj['threat_score'],
+                        'plate_number': track_obj['plate_number'], 
+                        'plate_data': track_obj['plate_data'],
+                        'vehicle_signature': track_obj['vehicle_signature']
                     })
 
-        matched_track_ids = set()
-        new_detections_to_add = []
 
-        for track_id, track_obj in list(tracked_objects.items()): 
-            matched_this_frame = False
-            best_iou = 0.0
-            best_det_idx = -1
+        # --- Predictive Incident Warning (Feature 10) ---
+        current_time = time.time()
+        if (current_time - LAST_COLLISION_ALERT_TIME) > COLLISION_ALERT_COOLDOWN:
+            for i, obj1 in enumerate(display_objects):
+                for j, obj2 in enumerate(display_objects):
+                    if i >= j: continue 
 
-            for i, det in enumerate(current_frame_detections):
-                if det['label'] != track_obj['label']:
-                    continue
+                    if obj1['label'] not in ["car", "truck", "bus", "person", "motorcycle"] or \
+                       obj2['label'] not in ["car", "truck", "bus", "person", "motorcycle"]:
+                        continue
 
-                iou = calculate_iou(track_obj['bbox'], det['bbox'])
-                if iou > best_iou and iou > IOU_THRESHOLD_FOR_TRACKING:
-                    best_iou = iou
-                    best_det_idx = i
-            
-            if best_det_idx != -1:
-                det = current_frame_detections.pop(best_det_idx) 
-                
-                cx_new = (det['bbox'][0] + det['bbox'][2]) / 2
-                cy_new = (det['bbox'][1] + det['bbox'][3]) / 2
-                
-                if 'prev_bbox_center' in track_obj and track_obj['prev_bbox_center'] is not None:
-                    cx_prev, cy_prev = track_obj['prev_bbox_center']
-                    vx = cx_new - cx_prev
-                    vy = cy_new - cy_prev
-                    
-                    track_obj['velocity_x'] = track_obj.get('velocity_x', 0) * (1 - TRAJECTORY_SMOOTHING_FACTOR) + vx * TRAJECTORY_SMOOTHING_FACTOR
-                    track_obj['velocity_y'] = track_obj.get('velocity_y', 0) * (1 - TRAJECTORY_SMOOTHING_FACTOR) + vy * TRAJECTORY_SMOOTHING_FACTOR
-                else:
-                    track_obj['velocity_x'] = 0
-                    track_obj['velocity_y'] = 0
+                    center1_x = (obj1['bbox'][0] + obj1['bbox'][2]) / 2
+                    center1_y = (obj1['bbox'][1] + obj1['bbox'][3]) / 2
+                    center2_x = (obj2['bbox'][0] + obj2['bbox'][2]) / 2
+                    center2_y = (obj2['bbox'][1] + obj2['bbox'][3]) / 2
 
-                track_obj['bbox'] = det['bbox'] 
-                track_obj['last_seen'] = frame_count
-                track_obj['prev_bbox_center'] = (cx_new, cy_new)
+                    distance = math.sqrt((center1_x - center2_x)**2 + (center1_y - center2_y)**2)
 
-                if det['confidence'] >= MIN_CONF_FOR_SMOOTHING_HISTORY: 
-                    tracked_objects[track_id]['confidence_history'].append(det['confidence'])
-                matched_track_ids.add(track_id)
-                matched_this_frame = True
-            
-            if not matched_this_frame:
-                tracked_objects[track_id]['last_seen_unmatched_count'] = tracked_objects[track_id].get('last_seen_unmatched_count', 0) + 1
-                cx_current = (track_obj['bbox'][0] + track_obj['bbox'][2]) / 2
-                cy_current = (track_obj['bbox'][1] + track_obj['bbox'][3]) / 2
-                track_obj['prev_bbox_center'] = (cx_current, cy_current)
-            else:
-                tracked_objects[track_id]['last_seen_unmatched_count'] = 0 
+                    if distance < COLLISION_PROXIMITY_THRESHOLD * global_ui_scale:
+                        vec1_x, vec1_y = obj1['velocity_x'], obj1['velocity_y']
+                        vec2_x, vec2_y = obj2['velocity_x'], obj2['velocity_y']
 
+                        rel_vx = vec1_x - vec2_x
+                        rel_vy = vec1_y - vec2_y
 
-        for det in current_frame_detections: 
-            if det['confidence'] >= YOLO_PRIMARY_DETECTION_CONFIDENCE: 
-                cx_new = (det['bbox'][0] + det['bbox'][2]) / 2
-                cy_new = (det['bbox'][1] + det['bbox'][3]) / 2
+                        target_vec_x = center1_x - center2_x
+                        target_vec_y = center1_y - center2_y
 
-                # Simulate number plate recognition for new cars/trucks (Feature 7)
-                plate_num = None
-                plate_data = {}
-                if det['label'] in ["car", "truck"]:
-                    # Generate a random plate number (e.g., "MH01AB1234")
-                    state_code = random.choice(["MH", "DL", "KA", "TN"])
-                    series = ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ', k=2))
-                    digits = ''.join(random.choices('0123456789', k=4))
-                    plate_num = f"{state_code}{random.randint(1,99):02d}{series}{digits}"
-                    plate_data = generate_simulated_plate_data(plate_num)
+                        dot_product = rel_vx * target_vec_x + rel_vy * target_vec_y
+                        
+                        if dot_product < 0:
+                            event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - PREDICTIVE ALERT: Collision imminent between ID:{obj1['id']} ({obj1['label']}) and ID:{obj2['id']} ({obj2['label']})!")
+                            LAST_COLLISION_ALERT_TIME = current_time
+                            for tracked_id, tracked_obj in tracked_objects.items():
+                                if tracked_id == obj1['id'] or tracked_id == obj2['id']:
+                                    tracked_obj['is_collision_alert'] = True
+                            break 
+                if (current_time - LAST_COLLISION_ALERT_TIME) <= COLLISION_ALERT_COOLDOWN:
+                    break 
 
+        if (current_time - LAST_COLLISION_ALERT_TIME) > COLLISION_ALERT_COOLDOWN:
+            for tracked_id, tracked_obj in tracked_objects.items():
+                tracked_obj['is_collision_alert'] = False
 
-                tracked_objects[next_object_id] = {
-                    'id': next_object_id,
-                    'bbox': det['bbox'],
-                    'label': det['label'],
-                    'last_seen': frame_count,
-                    'last_seen_unmatched_count': 0,
-                    'confidence_history': deque([det['confidence']], maxlen=CONFIDENCE_SMOOTHING_WINDOW_SIZE),
-                    'velocity_x': 0.0, 
-                    'velocity_y': 0.0,
-                    'prev_bbox_center': (cx_new, cy_new),
-                    'threat_score': 0.0,
-                    'plate_number': plate_num, # Store simulated plate
-                    'plate_data': plate_data # Store simulated plate data
-                }
-                next_object_id += 1
-        
-        tracks_to_delete = [track_id for track_id, track_obj in tracked_objects.items() if track_obj['last_seen_unmatched_count'] > MAX_TRACKING_AGE]
-        for track_id in tracks_to_delete:
-            del tracked_objects[track_id]
-
-        display_objects = []
-        for track_id, track_obj in tracked_objects.items():
-            if not track_obj['confidence_history']: 
-                continue
-            smoothed_conf = sum(track_obj['confidence_history']) / len(track_obj['confidence_history'])
-            
-            if smoothed_conf >= YOLO_PRIMARY_DETECTION_CONFIDENCE: # Use primary detection confidence for display
-                # Calculate Threat Score (Feature 5)
-                threat_score = THREAT_BASE_SCORES.get(track_obj['label'], 1) 
-                
-                speed_px_per_frame = math.sqrt(track_obj['velocity_x']**2 + track_obj['velocity_y']**2)
-                threat_score += speed_px_per_frame * THREAT_SPEED_MULTIPLIER
-
-                bbox_area = (track_obj['bbox'][2] - track_obj['bbox'][0]) * (track_obj['bbox'][3] - track_obj['bbox'][1])
-                relative_distance_val = 0
-                if bbox_area > 0:
-                    relative_distance_val = 1.0 / (math.sqrt(bbox_area) / (frame_width * global_ui_scale) + 0.0001)
-                
-                threat_score += (THREAT_DISTANCE_INVERSE_MULTIPLIER / (relative_distance_val + 1)) 
-                
-                track_obj['threat_score'] = min(threat_score, 100.0) 
-
-                display_objects.append({
-                    'id': track_id, 
-                    'bbox': track_obj['bbox'],
-                    'label': track_obj['label'],
-                    'confidence': smoothed_conf,
-                    'velocity_x': track_obj['velocity_x'],
-                    'velocity_y': track_obj['velocity_y'],
-                    'threat_score': track_obj['threat_score'],
-                    'plate_number': track_obj['plate_number'], # Pass plate data
-                    'plate_data': track_obj['plate_data']
-                })
-                
-                if track_obj['label'] in ["car", "truck", "bus"]: 
-                    current_cars += 1
-                if track_obj['label'] in ACCIDENT_IMPACT_OBJECTS: 
-                    current_accident_impact_objects += 1
 
         # --- Environmental Anomaly Detection (Feature 6) ---
         current_time = time.time()
@@ -694,6 +802,60 @@ def run_traffic_monitoring():
                 event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Env Anomaly: Sudden Density Change ({current_object_density:.2f})")
                 LAST_DENSITY_ALERT_TIME = current_time
         prev_object_density = current_object_density
+
+
+        # --- Traffic Flow Analysis & Anomaly Detection (Feature 11) ---
+        if (current_time - LAST_TRAFFIC_FLOW_ALERT_TIME) > TRAFFIC_FLOW_ALERT_COOLDOWN:
+            zone_height = frame_height // TRAFFIC_ZONE_COUNT
+            for i in range(TRAFFIC_ZONE_COUNT):
+                zone_y1 = i * zone_height
+                zone_y2 = (i + 1) * zone_height
+                
+                zone_objects_speeds = []
+                for obj in display_objects:
+                    if obj['label'] in ["car", "truck", "bus"]:
+                        obj_center_y = (obj['bbox'][1] + obj['bbox'][3]) / 2
+                        if zone_y1 <= obj_center_y < zone_y2:
+                            speed = math.sqrt(obj['velocity_x']**2 + obj['velocity_y']**2)
+                            if speed > 0: # Only consider moving vehicles
+                                zone_objects_speeds.append(speed)
+                
+                if zone_objects_speeds:
+                    avg_zone_speed = sum(zone_objects_speeds) / len(zone_objects_speeds)
+                    traffic_zone_speeds[i].append(avg_zone_speed)
+
+                    if len(traffic_zone_speeds[i]) > 1:
+                        prev_avg_zone_speed = traffic_zone_speeds[i][0] # Oldest speed in deque
+                        if prev_avg_zone_speed > 0 and \
+                           (prev_avg_zone_speed - avg_zone_speed) / prev_avg_zone_speed > TRAFFIC_FLOW_SPEED_THRESHOLD_SLOWDOWN:
+                            event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Traffic Anomaly: Slowdown in Zone {i+1} ({avg_zone_speed:.1f}p/f)")
+                            LAST_TRAFFIC_FLOW_ALERT_TIME = current_time
+                            break # Only one traffic flow alert per cycle
+
+        # --- Driver Behavior Monitoring (Simulated) (Feature 12) ---
+        if (current_time - LAST_DRIVER_BEHAVIOR_ALERT_TIME) > DRIVER_BEHAVIOR_ALERT_COOLDOWN:
+            for i, obj1 in enumerate(display_objects):
+                for j, obj2 in enumerate(display_objects):
+                    if i == j: continue
+
+                    # Tailgating check (car/truck/bus only)
+                    if obj1['label'] in ["car", "truck", "bus"] and obj2['label'] in ["car", "truck", "bus"]:
+                        center1_x = (obj1['bbox'][0] + obj1['bbox'][2]) / 2
+                        center1_y = (obj1['bbox'][1] + obj1['bbox'][3]) / 2
+                        center2_x = (obj2['bbox'][0] + obj2['bbox'][2]) / 2
+                        center2_y = (obj2['bbox'][1] + obj2['bbox'][3]) / 2
+
+                        dist = math.sqrt((center1_x - center2_x)**2 + (center1_y - center2_y)**2)
+                        
+                        # Check if obj1 is behind obj2 and too close, and obj1 is faster
+                        if dist < TAILGATING_DISTANCE_THRESHOLD * global_ui_scale and \
+                           obj1['velocity_y'] > obj2['velocity_y'] + TAILGATING_SPEED_DIFF_THRESHOLD and \
+                           obj1['bbox'][3] > obj2['bbox'][3]: # obj1 is below obj2 (behind)
+                            event_log_history.append(f"{datetime.now().strftime('%H:%M:%S')} - Driver Behavior: Tailgating (ID:{obj1['id']} behind ID:{obj2['id']})")
+                            LAST_DRIVER_BEHAVIOR_ALERT_TIME = current_time
+                            break
+                if (current_time - LAST_DRIVER_BEHAVIOR_ALERT_TIME) <= DRIVER_BEHAVIOR_ALERT_COOLDOWN:
+                    break
 
 
         # Alert Logic (remains largely the same, but uses current_cars/impact_objects from tracked data)
@@ -752,6 +914,10 @@ def run_traffic_monitoring():
         # --- Draw Main HUD Elements ---
         min_display_dim = min(frame_width, frame_height)
         dynamic_padding = max(5, int(20 * (min_display_dim / UI_DESIGN_BASE_HEIGHT))) 
+
+        # Create a transparent HUD layer to draw on
+        hud_layer = Image.new("RGBA", (frame_width, frame_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(hud_layer, "RGBA")
         
         hud_outline_width = max(1, int(HUD_OUTLINE_WIDTH_BASE * global_ui_scale))
         hud_corner_radius = max(5, int(HUD_CORNER_RADIUS_BASE * global_ui_scale))
@@ -763,7 +929,7 @@ def run_traffic_monitoring():
 
         # --- Top-left HUD block: Scene, Status, and Action ---
         panel1_width = max(int(frame_width * panel_base_width_ratio), int(150 * global_ui_scale)) 
-        panel1_height = max(int(frame_height * panel_base_height_ratio), int(120 * global_ui_scale)) 
+        panel1_height = max(int(frame_height * 0.15), int(100 * global_ui_scale)) 
         panel1_x = dynamic_padding
         panel1_y = dynamic_padding
 
@@ -777,9 +943,9 @@ def run_traffic_monitoring():
         pulse_alpha = int(255 * (math.sin(frame_counter_for_animation * 0.1) * 0.2 + 0.8)) 
         text_color_pulsating = scene_color_for_display[:3] + (pulse_alpha,)
 
-        draw_hud_text(draw, scene_display_text, (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_main, text_color_pulsating, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, scene_display_text, (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_main, text_color_pulsating, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         current_y_in_panel1 += font_main_height + int(5 * global_ui_scale)
-        draw_hud_text(draw, f"CONF: {smoothed_scene_confidence:.2f}", (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_sub, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, f"CONF: {smoothed_scene_confidence:.2f}", (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_sub, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         
         line_start_x = panel1_x + int(15 * global_ui_scale)
         line_end_x = panel1_x + panel1_width - int(15 * global_ui_scale)
@@ -810,9 +976,9 @@ def run_traffic_monitoring():
                            fill=pulsating_fill_color)
                            
 
-        draw_hud_text(draw, f"STATUS: {current_alert_level.replace('_', ' ').upper()}", (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_sub, alert_text_color, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, f"STATUS: {current_alert_level.replace('_', ' ').upper()}", (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_sub, alert_text_color, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         current_y_in_panel1 += font_sub_height + int(5 * global_ui_scale)
-        draw_hud_text(draw, display_action_message, (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, display_action_message, (panel1_x + int(20 * global_ui_scale), current_y_in_panel1), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
 
 
         # --- Top-Right Panel: Object Classification ---
@@ -830,13 +996,12 @@ def run_traffic_monitoring():
         if text_w > (panel2_width - int(40 * global_ui_scale)):
              font_sub_obj_title = ImageFont.truetype(default_font_path, max(8, int(hud_font_size_sub_scaled * 0.8 * (panel2_width / (text_w if text_w > 0 else 1.0)))))
         
-        draw_hud_text(draw, title_text_obj, (panel2_x + int(20 * global_ui_scale), panel2_y + int(15 * global_ui_scale)), font_sub_obj_title, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, title_text_obj, (panel2_x + int(20 * global_ui_scale), panel2_y + int(15 * global_ui_scale)), font_sub_obj_title, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         draw_glowing_line(draw, panel2_x + int(20 * global_ui_scale), panel2_y + int(50 * global_ui_scale), panel2_x + panel2_width - int(20 * global_ui_scale), panel2_y + int(50 * global_ui_scale), HUD_CYAN_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
 
         object_counts_display: Dict[str, int] = {}
         objects_in_roi_count: Dict[str, int] = {} 
 
-        # Conceptual ROI for tagging (not visually drawn on main screen)
         roi_x1_abs_tag = int(frame_width * 0.3)
         roi_y1_abs_tag = int(frame_height * 0.3)
         roi_x2_abs_tag = int(frame_width * 0.7)
@@ -858,7 +1023,7 @@ def run_traffic_monitoring():
         current_obj_lines_count = 0
         sorted_objects_display = sorted(object_counts_display.items(), key=lambda item: item[1], reverse=True) 
         
-        draw_hud_text(draw, "Overall:", (panel2_x + int(20 * global_ui_scale), obj_content_y_start), font_small, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, "Overall:", (panel2_x + int(20 * global_ui_scale), obj_content_y_start), font_small, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         current_obj_lines_count += 1
         
         for obj_label, count in sorted_objects_display:
@@ -872,24 +1037,24 @@ def run_traffic_monitoring():
                         display_obj_text = display_obj_text[:max(chars_to_fit, 1)].strip() + "."
                     else:
                         display_obj_text = "" 
-                draw_hud_text(draw, display_obj_text, (panel2_x + int(20 * global_ui_scale), obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+                draw_hud_text(draw, display_obj_text, (panel2_x + int(20 * global_ui_scale), obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
                 current_obj_lines_count += 1
         
         total_detected_objects = sum(object_counts_display.values()) 
         if current_obj_lines_count < max_lines_obj: 
-             draw_hud_text(draw, f"TOTAL: {total_detected_objects}", (panel2_x + int(20 * global_ui_scale), obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,100), outline_width=1)
+             draw_hud_text(draw, f"TOTAL: {total_detected_objects}", (panel2_x + int(20 * global_ui_scale), obj_content_y_start + current_obj_lines_count * obj_line_height), font_small, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,200), outline_width=3) # Increased outline
 
 
-        # --- Middle-Right Panel: Number Plate Recognition & Details (Feature 7) ---
+        # --- Middle-Right Panel: Vehicle Info (Feature 7) ---
         panel3_width = panel2_width 
-        panel3_height = max(int(frame_height * 0.20), int(150 * global_ui_scale)) # New panel, similar height
+        panel3_height = max(int(frame_height * 0.20), int(150 * global_ui_scale)) 
         panel3_x = panel2_x
-        panel3_y = panel2_y + panel2_height + dynamic_padding # Stacked below panel 2
+        panel3_y = panel2_y + panel2_height + dynamic_padding 
 
         draw_hud_box(draw, (panel3_x, panel3_y, panel3_x + panel3_width, panel3_y + panel3_height), HUD_BLUE_DARK_TRANSPARENT, HUD_YELLOW_ACCENT, hud_outline_width, hud_corner_radius)
         
-        title_text_npr = "VEHICLE INFO" # More generic title
-        draw_hud_text(draw, title_text_npr, (panel3_x + int(20 * global_ui_scale), panel3_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,100), outline_width=1)
+        title_text_npr = "VEHICLE INFO (SIMULATED)" # Added (SIMULATED)
+        draw_hud_text(draw, title_text_npr, (panel3_x + int(20 * global_ui_scale), panel3_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         draw_glowing_line(draw, panel3_x + int(20 * global_ui_scale), panel3_y + int(50 * global_ui_scale), panel3_x + panel3_width - int(20 * global_ui_scale), panel3_y + int(50 * global_ui_scale), HUD_YELLOW_ACCENT, base_width=max(1, int(1 * global_ui_scale)))
 
         npr_content_y_start = panel3_y + int(60 * global_ui_scale)
@@ -898,41 +1063,39 @@ def run_traffic_monitoring():
         max_lines_npr = max(1, available_height_for_npr_list // npr_line_height)
 
         current_npr_lines_count = 0
-        # Display details for the first car/truck with plate info
         found_plate_data = False
         for obj in display_objects:
             if obj['label'] in ["car", "truck"] and obj['plate_number']:
-                draw_hud_text(draw, f"Plate: {obj['plate_number']}", (panel3_x + int(20 * global_ui_scale), npr_content_y_start), font_small, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,100), outline_width=1)
+                draw_hud_text(draw, f"Plate: {obj['plate_number']}", (panel3_x + int(20 * global_ui_scale), npr_content_y_start), font_small, HUD_TEXT_COLOR_HIGHLIGHT, outline_color=(0,0,0,200), outline_width=3) # Increased outline
                 current_npr_lines_count += 1
                 
                 for key, value in obj['plate_data'].items():
                     if current_npr_lines_count < max_lines_npr:
-                        draw_hud_text(draw, f"- {key}: {value}", (panel3_x + int(20 * global_ui_scale), npr_content_y_start + current_npr_lines_count * npr_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+                        draw_hud_text(draw, f"- {key}: {value}", (panel3_x + int(20 * global_ui_scale), npr_content_y_start + current_npr_lines_count * npr_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
                         current_npr_lines_count += 1
                 found_plate_data = True
-                break # Only show data for one vehicle for now
+                break 
         
         if not found_plate_data:
-            draw_hud_text(draw, "Scanning for vehicles...", (panel3_x + int(20 * global_ui_scale), npr_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+            draw_hud_text(draw, "Scanning for vehicles...", (panel3_x + int(20 * global_ui_scale), npr_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
 
 
         # --- Bottom-Right Panel: Object Details, System Health, Scene Confidence ---
         panel4_width = panel2_width 
-        panel4_height = max(int(frame_height * 0.35), int(250 * global_ui_scale)) # Adjusted height to fit more
+        panel4_height = max(int(frame_height * 0.35), int(250 * global_ui_scale)) 
         panel4_x = panel2_x
-        panel4_y = panel3_y + panel3_height + dynamic_padding # Stacked below panel 3
+        panel4_y = panel3_y + panel3_height + dynamic_padding 
 
         draw_hud_box(draw, (panel4_x, panel4_y, panel4_x + panel4_width, panel4_y + panel4_height), HUD_BLUE_DARK_TRANSPARENT, HUD_GREEN_LIGHT, hud_outline_width, hud_corner_radius)
         
         title_text_obj_det = "OBJECT DETAILS"
-        draw_hud_text(draw, title_text_obj_det, (panel4_x + int(20 * global_ui_scale), panel4_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, title_text_obj_det, (panel4_x + int(20 * global_ui_scale), panel4_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         draw_glowing_line(draw, panel4_x + int(20 * global_ui_scale), panel4_y + int(50 * global_ui_scale), panel4_x + panel4_width - int(20 * global_ui_scale), panel4_y + int(50 * global_ui_scale), HUD_CYAN_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
 
         obj_det_content_y_start = panel4_y + int(60 * global_ui_scale)
         obj_det_line_height = font_small_height + int(5 * global_ui_scale)
         
-        # Calculate space for object details and system health
-        max_lines_obj_det = 3 # Limit object details to top few
+        max_lines_obj_det = 3 
         
         current_obj_det_lines_count = 0
         sorted_display_objects = sorted(display_objects, key=lambda x: x['threat_score'], reverse=True)
@@ -949,24 +1112,29 @@ def run_traffic_monitoring():
                 speed_display = f"{speed_px_per_frame:.1f}p/f" 
 
                 detail_text = f"ID:{obj['id']} {obj['label']} | T:{obj['threat_score']:.0f}"
-                draw_hud_text(draw, detail_text, (panel4_x + int(20 * global_ui_scale), obj_det_content_y_start + current_obj_det_lines_count * obj_det_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+                draw_hud_text(draw, detail_text, (panel4_x + int(20 * global_ui_scale), obj_det_content_y_start + current_obj_det_lines_count * obj_det_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
                 current_obj_det_lines_count += 1
                 
-                # Add speed/distance as sub-line for more detail
                 speed_dist_text = f"  Spd:{speed_display} Dist:{relative_distance_display}"
-                draw_hud_text(draw, speed_dist_text, (panel4_x + int(20 * global_ui_scale), obj_det_content_y_start + current_obj_det_lines_count * obj_det_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+                draw_hud_text(draw, speed_dist_text, (panel4_x + int(20 * global_ui_scale), obj_det_content_y_start + current_obj_det_lines_count * obj_det_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
                 current_obj_det_lines_count += 1
-        
-        if not display_objects:
-            draw_hud_text(draw, "No objects for detailed view.", (panel4_x + int(20 * global_ui_scale), obj_det_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
-            current_obj_det_lines_count += 2 # Reserve space if no objects
+                
+                # Vehicle Signature (Feature 9)
+                if obj['label'] in ["car", "truck", "bus"]:
+                    sig_text = f"  Sig: {obj['vehicle_signature'].get('Make', 'N/A')}, {obj['vehicle_signature'].get('Color', 'N/A')}"
+                    draw_hud_text(draw, sig_text, (panel4_x + int(20 * global_ui_scale), obj_det_content_y_start + current_obj_det_lines_count * obj_det_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
+                    current_obj_det_lines_count += 1
 
-        # Separator for System Health
+
+        if not display_objects:
+            draw_hud_text(draw, "No objects for detailed view.", (panel4_x + int(20 * global_ui_scale), obj_det_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
+            current_obj_det_lines_count += 3 
+
         line_y_sys_sep = obj_det_content_y_start + current_obj_det_lines_count * obj_det_line_height + int(10 * global_ui_scale)
         draw_glowing_line(draw, panel4_x + int(20 * global_ui_scale), line_y_sys_sep, panel4_x + panel4_width - int(20 * global_ui_scale), line_y_sys_sep, HUD_GREEN_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
 
         sys_content_y_start = line_y_sys_sep + int(10 * global_ui_scale)
-        draw_hud_text(draw, "SYSTEM HEALTH", (panel4_x + int(20 * global_ui_scale), sys_content_y_start), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, "SYSTEM HEALTH", (panel4_x + int(20 * global_ui_scale), sys_content_y_start), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         sys_content_y_start += font_sub_height + int(5 * global_ui_scale)
 
         fps_text = ""
@@ -988,9 +1156,9 @@ def run_traffic_monitoring():
             f"Device: {str(torch.device('cuda' if torch.cuda.is_available() else 'cpu')).upper()}"
         ]
         
+        sys_line_height = font_small_height + int(5 * global_ui_scale)
         current_sys_lines_count = 0
         available_height_for_sys_list = panel4_height - (sys_content_y_start - panel4_y) - int(10 * global_ui_scale)
-        sys_line_height = font_small_height + int(5 * global_ui_scale)
         max_sys_lines = max(1, available_height_for_sys_list // sys_line_height)
 
         for i, line in enumerate(sys_lines):
@@ -1004,10 +1172,9 @@ def run_traffic_monitoring():
                         display_sys_text = display_sys_text[:max(chars_to_fit, 1)].strip() + "."
                     else:
                         display_sys_text = ""
-                draw_hud_text(draw, display_sys_text, (panel4_x + int(20 * global_ui_scale), sys_content_y_start + i * sys_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+                draw_hud_text(draw, display_sys_text, (panel4_x + int(20 * global_ui_scale), sys_content_y_start + i * sys_line_height), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
                 current_sys_lines_count += 1
 
-        # --- Scene Confidence Bar Graph (Bottom of Panel 4) ---
         graph_title_bbox = font_small.getbbox("SCENE CONFIDENCE:") 
         graph_title_height_actual = graph_title_bbox[3] - graph_title_bbox[1] 
         
@@ -1016,18 +1183,18 @@ def run_traffic_monitoring():
 
         graph_y_start = panel4_y + panel4_height - graph_height_actual - int(10 * global_ui_scale)
         
-        draw_hud_text(draw, "SCENE CONFIDENCE:", (panel4_x + int(20 * global_ui_scale), graph_y_start - graph_title_height_actual), font_small, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, "SCENE CONFIDENCE:", (panel4_x + int(20 * global_ui_scale), graph_y_start - graph_title_height_actual), font_small, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         draw_bar_graph(draw, panel4_x + int(10 * global_ui_scale), graph_y_start, panel4_width - int(20 * global_ui_scale), graph_height_actual, top_predictions_for_graph, font_small, HUD_CYAN_LIGHT, ui_scale_factor=global_ui_scale)
 
 
         # --- Bottom-Left Panel: Event Log ---
         panel5_width = max(int(frame_width * panel_base_width_ratio), int(160 * global_ui_scale)) 
-        panel5_height = max(int(frame_height * panel_base_height_ratio), int(130 * global_ui_scale))
+        panel5_height = max(int(frame_height * 0.20), int(150 * global_ui_scale)) 
         panel5_x = dynamic_padding
-        panel5_y = frame_height - panel5_height - dynamic_padding - (max(int(frame_height * 0.04), int(30 * global_ui_scale))) # Adjust for bottom bar
+        panel5_y = frame_height - panel5_height - dynamic_padding - (max(int(frame_height * 0.04), int(30 * global_ui_scale))) 
         
         draw_hud_box(draw, (panel5_x, panel5_y, panel5_x + panel5_width, panel5_y + panel5_height), HUD_BLUE_DARK_TRANSPARENT, HUD_BLUE_LIGHT, hud_outline_width, hud_corner_radius)
-        draw_hud_text(draw, "EVENT LOG", (panel5_x + int(20 * global_ui_scale), panel5_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, "EVENT LOG", (panel5_x + int(20 * global_ui_scale), panel5_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         draw_glowing_line(draw, panel5_x + int(20 * global_ui_scale), panel5_y + int(50 * global_ui_scale), panel5_x + panel5_width - int(20 * global_ui_scale), panel5_y + int(50 * global_ui_scale), HUD_BLUE_LIGHT, base_width=max(1, int(1 * global_ui_scale)))
 
         log_content_y_start = panel5_y + int(60 * global_ui_scale)
@@ -1067,9 +1234,9 @@ def run_traffic_monitoring():
                             display_log_text = display_log_text[:max(chars_to_fit, 1)].strip() + "."
                         else:
                             display_log_text = ""
-                    draw_hud_text(draw, display_log_text, (panel5_x + int(20 * global_ui_scale), y_pos), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+                    draw_hud_text(draw, display_log_text, (panel5_x + int(20 * global_ui_scale), y_pos), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
         else: 
-            draw_hud_text(draw, "No events to display.", (panel5_x + int(20 * global_ui_scale), log_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+            draw_hud_text(draw, "No events to display.", (panel5_x + int(20 * global_ui_scale), log_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
 
 
         # --- Bottom Status Bar (Temperature, Time) ---
@@ -1077,13 +1244,64 @@ def run_traffic_monitoring():
         status_bar_y = frame_height - status_bar_height
         draw.rectangle((0, status_bar_y, frame_width, frame_height), fill=HUD_BLUE_DARK_TRANSPARENT, outline=HUD_BLUE_LIGHT, width=hud_outline_width)
         
-        temp_text = "28°C Cloudy" 
+        temp_text = "28°C Partly Cloudy" 
         time_text = datetime.now().strftime('%H:%M:%S')
         date_text = datetime.now().strftime('%d-%m-%Y')
 
-        draw_hud_text(draw, temp_text, (dynamic_padding, status_bar_y + int(5 * global_ui_scale)), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
-        draw_hud_text(draw, time_text, (frame_width - dynamic_padding - (font_small.getbbox(time_text)[2] - font_small.getbbox(time_text)[0]), status_bar_y + int(5 * global_ui_scale)), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
-        draw_hud_text(draw, date_text, (frame_width - dynamic_padding - (font_small.getbbox(date_text)[2] - font_small.getbbox(date_text)[0]), status_bar_y + int(5 * global_ui_scale) + font_small_height + int(2 * global_ui_scale)), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,100), outline_width=1)
+        draw_hud_text(draw, temp_text, (dynamic_padding, status_bar_y + int(5 * global_ui_scale)), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
+        draw_hud_text(draw, time_text, (frame_width - dynamic_padding - (font_small.getbbox(time_text)[2] - font_small.getbbox(time_text)[0]), status_bar_y + int(5 * global_ui_scale)), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
+        draw_hud_text(draw, date_text, (frame_width - dynamic_padding - (font_small.getbbox(date_text)[2] - font_small.getbbox(date_text)[0]), status_bar_y + int(5 * global_ui_scale) + font_small_height + int(2 * global_ui_scale)), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
+
+        # --- Number Plate Log Panel (Bottom Right) ---
+        panel6_width = max(int(frame_width * panel_base_width_ratio), int(180 * global_ui_scale)) 
+        panel6_height = max(int(frame_height * 0.20), int(150 * global_ui_scale))
+        panel6_x = frame_width - panel6_width - dynamic_padding
+        panel6_y = frame_height - panel6_height - dynamic_padding - (max(int(frame_height * 0.04), int(30 * global_ui_scale))) 
+
+        draw_hud_box(draw, (panel6_x, panel6_y, panel6_x + panel6_width, panel6_y + panel6_height), HUD_BLUE_DARK_TRANSPARENT, HUD_YELLOW_ACCENT, hud_outline_width, hud_corner_radius)
+        draw_hud_text(draw, "PLATE LOG (SIMULATED)", (panel6_x + int(20 * global_ui_scale), panel6_y + int(15 * global_ui_scale)), font_sub, HUD_TEXT_COLOR_PRIMARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
+        draw_glowing_line(draw, panel6_x + int(20 * global_ui_scale), panel6_y + int(50 * global_ui_scale), panel6_x + panel6_width - int(20 * global_ui_scale), panel6_y + int(50 * global_ui_scale), HUD_YELLOW_ACCENT, base_width=max(1, int(1 * global_ui_scale)))
+
+        plate_log_content_y_start = panel6_y + int(60 * global_ui_scale)
+        plate_log_line_height = font_small_height + int(5 * global_ui_scale)
+        available_height_for_plate_log = panel6_height - (plate_log_content_y_start - panel6_y) - int(10 * global_ui_scale)
+        max_plate_log_lines = max(1, available_height_for_plate_log // plate_log_line_height)
+
+        if len(all_detected_plates) > 0:
+            effective_plate_log_length = len(all_detected_plates)
+            scroll_speed_factor_plates = max(1.0, effective_plate_log_length / max_plate_log_lines) if max_plate_log_lines > 0 else 1.0
+            scroll_duration_frames_plates = int(effective_plate_log_length * 30 / scroll_speed_factor_plates) 
+            
+            if scroll_duration_frames_plates == 0: scroll_denominator_plates = 1 
+            else: scroll_denominator_plates = scroll_duration_frames_plates
+
+            plate_log_scroll_pos_norm = (frame_counter_for_animation % scroll_denominator_plates) / scroll_denominator_plates
+            
+            total_scroll_lines_plates = (effective_plate_log_length - max_plate_log_lines) if effective_plate_log_length > max_plate_log_lines else 0
+            current_scroll_offset_lines_plates = total_scroll_lines_plates * plate_log_scroll_pos_norm
+            
+            for i in range(max_plate_log_lines):
+                plate_log_entry_target_index = i + current_scroll_offset_lines_plates
+                actual_plate_log_index = int(plate_log_entry_target_index)
+                
+                if actual_plate_log_index < effective_plate_log_length and actual_plate_log_index >= 0:
+                    plate_entry = all_detected_plates[actual_plate_log_index]
+                    
+                    y_pos_adjustment = (plate_log_entry_target_index - actual_plate_log_index) * plate_log_line_height
+                    y_pos = plate_log_content_y_start + i * plate_log_line_height - y_pos_adjustment
+                    
+                    display_plate_text = plate_entry
+                    plate_text_bbox = font_small.getbbox(display_plate_text) 
+                    text_w = plate_text_bbox[2] - plate_text_bbox[0] 
+                    if text_w > (panel6_width - int(40 * global_ui_scale)):
+                        chars_to_fit = int(len(display_plate_text) * ((panel6_width - int(40 * global_ui_scale)) / (text_w if text_w > 0 else 1.0))) - 2
+                        if chars_to_fit > 0:
+                            display_plate_text = display_plate_text[:max(chars_to_fit, 1)].strip() + "."
+                        else:
+                            display_plate_text = ""
+                    draw_hud_text(draw, display_plate_text, (panel6_x + int(20 * global_ui_scale), y_pos), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
+        else: 
+            draw_hud_text(draw, "No plates detected yet.", (panel6_x + int(20 * global_ui_scale), plate_log_content_y_start), font_small, HUD_TEXT_COLOR_SECONDARY, outline_color=(0,0,0,200), outline_width=3) # Increased outline
 
 
         # --- Draw tracked objects (bounding boxes, labels, metadata, trajectory) ---
@@ -1094,20 +1312,24 @@ def run_traffic_monitoring():
             obj_id = obj['id'] 
             vx, vy = obj['velocity_x'], obj['velocity_y']
             threat_score = obj['threat_score']
+            is_collision_alert = tracked_objects.get(obj_id, {}).get('is_collision_alert', False) 
 
-            # Dynamic bounding box color based on threat score (Feature 5)
-            if threat_score >= 80:
+            if is_collision_alert:
+                flash_alpha = int(255 * (math.sin(frame_counter_for_animation * 0.5) * 0.5 + 0.5))
+                color = HUD_RED_CRITICAL[:3]
+                color_with_alpha = color + (flash_alpha,)
+            elif threat_score >= 80:
                 color = HUD_RED_CRITICAL[:3] 
+                color_with_alpha = color + (180,)
             elif threat_score >= 50:
                 color = HUD_YELLOW_ACCENT[:3] 
+                color_with_alpha = color + (180,)
             else:
                 color = BBOX_COLORS.get(label, (200, 200, 200)) 
-            
-            color_with_alpha = color + (180,) 
+                color_with_alpha = color + (180,)
             
             draw.rectangle([x1, y1, x2, y2], outline=color_with_alpha, width=max(1, int(frame_width * 0.002 * global_ui_scale))) 
             
-            # Draw trajectory prediction
             center_x = (x1 + x2) / 2
             center_y = (y1 + y2) / 2
             
@@ -1133,7 +1355,6 @@ def run_traffic_monitoring():
             relative_distance_display = f"{min(relative_distance_val, 999.9):.1f}u" 
             speed_display = f"{speed_px_per_frame:.1f}p/f" 
 
-            # Main label with ID, smoothed confidence, and threat score
             text_label = f"{label.upper()} ({conf:.2f}) ID:{obj_id} T:{threat_score:.0f}" 
             bbox_font_small = font_small
             
@@ -1160,8 +1381,7 @@ def run_traffic_monitoring():
             if text_y < 0: text_y = y1 + max(1, int(2 * global_ui_scale)) 
                 
             draw_rounded_rectangle(draw, [text_x - max(1, int(2 * global_ui_scale)), text_y - max(1, int(2 * global_ui_scale)), text_x + text_w + max(1, int(4 * global_ui_scale)), text_y + text_h + max(1, int(4 * global_ui_scale))], radius=max(1, int(4 * global_ui_scale)), fill=color_with_alpha)
-            # Use improved draw_hud_text for bounding box labels
-            draw_hud_text(draw, text_label, (text_x, text_y), bbox_font_small, (255,255,255,255), outline_color=(0,0,0,150), outline_width=1)
+            draw_hud_text(draw, text_label, (text_x, text_y), bbox_font_small, (255,255,255,255), outline_color=(0,0,0,200), outline_width=3) # Increased outline
 
 
         # --- Composite the HUD layer onto the original frame ---
